@@ -1,0 +1,17 @@
+{
+  "name": "roleplay-bot",
+  "version": "0.1.0",
+  "description": "A roleplay bot running DiscordJS to manage text-based Roleplays",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "discordjs"
+  ],
+  "author": "Riley Winkler",
+  "license": "ISC",
+  "dependencies": {
+    "discord.js": "^13.6.0"
+  }
+}
