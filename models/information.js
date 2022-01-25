@@ -10,6 +10,13 @@ class Information {
     }
 
     // Static methods
+    /**
+     * Create a new information object and save it to the database.
+     * @param {string} name The name of the information.
+     * @param {string} type The type of the information. (generic, attribute, skill, etc.)
+     * @param {string} value The value of the information.
+     * @returns {Promise<Information>} The information object.
+     */
     static async new(name, type, value) {
         try {
             const information = new Information();
@@ -21,10 +28,15 @@ class Information {
             return information;
         } catch (error) {
             console.error(error);
-            return null, error;
+            return null;
         }
     }
 
+    /**
+     * Get the information object from the database.
+     * @param {number} id The id of the information to retrieve.
+     * @returns {Promise<Information>} The information object.
+     */
     static async get(id) {
         try {
             const entry = await IDB.findOne({ where: { id } });
@@ -37,11 +49,15 @@ class Information {
             return information;
         } catch (error) {
             console.error(error);
-            return null, error;
+            return null;
         }
     }
 
     // Instance methods
+    /**
+     * Convert the information to a JSON object.
+     * @returns {Object} The information object.
+     */
     toJSON() {
         return {
             id: this.id,
