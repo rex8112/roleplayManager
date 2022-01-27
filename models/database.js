@@ -32,7 +32,39 @@ const Information = sequelize.define('information', {
     },
 });
 
+const Character = sequelize.define('character', {
+    id: {
+        type: DataTypes.BIGINT,
+        primaryKey: true,
+        autoIncrement: true,
+    },
+    name: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    user: {
+        type: DataTypes.BIGINT,
+    },
+    knowledge: {
+        type: DataTypes.JSON,
+        allowNull: false,
+    },
+    publicInformation: {
+        type: DataTypes.JSON,
+        allowNull: false,
+    },
+    privateInformation: {
+        type: DataTypes.JSON,
+        allowNull: false,
+    },
+    gmInformation: {
+        type: DataTypes.JSON,
+        allowNull: false,
+    },
+});
+
 module.exports = {
     Information,
+    Character,
     sequelize,
 };

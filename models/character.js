@@ -1,6 +1,7 @@
 // character.js
-const { Collection } = require("discord.js");
-const { Information } = require("./information");
+const { Collection } = require('discord.js');
+const { Information } = require('./information');
+const { Character: CDB } = require('./database');
 
 class Character {
     constructor() {
@@ -15,7 +16,56 @@ class Character {
         this.gmInformation = new Collection();
     }
 
+    // Static methods
+    static async new(name) {
+        const character = new Character();
+        character.name = name;
+        const data = character.toJSON();
+        delete data.id;
+        const entry = await CDB.create(data);
+        character.id = entry.id;
+        return character;
+    }
+
+    static async get(id) {
+        const character = new Character();
+        const entry = await CDB.findOne({ where: { id } });
+        if (!entry) return null;
+        character.id = entry.id;
+        character.name = entry.name;
+        character.user = entry.user;
+        character.knowledge = Array.from(entry.knowledge);
+        character.publicInformation = new Collection(await Promise.all(entry.publicInformation.map(async i => [i, await Information.get(i)])));
+        character.privateInformation = new Collection(await Promise.all(entry.privateInformation.map(async i => [i, await Information.get(i)])));
+        character.gmInformation = new Collection(await Promise.all(entry.gmInformation.map(async i => [i, await Information.get(i)])));
+        return character;
+    }
+
+    /**
+     * Convert a JSON object to a character.
+     * @param {Object} json The JSON object to convert to a character.
+     * @returns The new character.
+     */
+    static async fromJSON(json) {
+        const character = new Character();
+        character.id = json.id;
+        character.name = json.name;
+        character.user = json.user;
+        character.knowledge = Array.from(json.knowledge);
+        character.publicInformation = new Collection(json.publicInformation.map(async i => [i, await Information.get(i)]));
+        character.privateInformation = new Collection(json.privateInformation.map(async i => [i, await Information.get(i)]));
+        character.gmInformation = new Collection(json.gmInformation.map(async i => [i, await Information.get(i)]));
+        return character;
+    }
+
     // Instance methods
+    /**
+     * Save the character to the database.
+     */
+    async save() {
+        await CDB.update(this.toJSON(), { where: { id: this.id } });
+    }
+
     /**
      * Add information to a character.
      * @param {string} classification The clearance classification of the information.
@@ -198,23 +248,6 @@ class Character {
             privateInformation: Array.from(this.privateInformation.keys()),
             gmInformation: Array.from(this.gmInformation.keys())
         }
-    }
-
-    /**
-     * Convert a JSON object to a character.
-     * @param {Object} json The JSON object to convert to a character.
-     * @returns The new character.
-     */
-    async static fromJSON(json) {
-        const character = new Character();
-        character.id = json.id;
-        character.name = json.name;
-        character.user = json.user;
-        character.knowledge = Array.from(json.knowledge);
-        character.publicInformation = new Collection(json.publicInformation.map(i => [i, await Information.get(i)]));
-        character.privateInformation = new Collection(json.privateInformation.map(i => [i, await Information.get(i)]));
-        character.gmInformation = new Collection(json.gmInformation.map(i => [i, await Information.get(i)]));
-        return character;
     }
 }
 
