@@ -1,5 +1,5 @@
 // information.js
-const { IDB } = require('../database');
+const { Information: IDB } = require('./database');
 
 class Information {
     constructor() {
@@ -23,7 +23,12 @@ class Information {
             information.name = name;
             information.type = type;
             information.value = value;
-            const entry = await IDB.create({ name, type, value });
+            let entry;
+            try{
+                entry = await IDB.create({ name: name, type: type, value: value });
+            } catch (err) {
+                throw new Error(`Error creating information: ${err}`);
+            }
             information.id = entry.id;
             return information;
         } catch (error) {
