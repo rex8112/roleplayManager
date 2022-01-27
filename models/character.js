@@ -67,6 +67,27 @@ class Character {
     }
 
     /**
+     * Set a character's name and change all of the information's name prefixes to comply.
+     * @param {string} name The new name of the character.
+     */
+    setName(name) {
+        this.name = name;
+        for (const information of this.publicInformation.values()) {
+            information.name = information.name.replace(/(\([^\)]*\))/gm, `(${name})`);
+            information.save();
+        }
+        for (const information of this.privateInformation.values()) {
+            information.name = information.name.replace(/(\([^\)]*\))/gm, `(${name})`);
+            information.save();
+        }
+        for (const information of this.gmInformation.values()) {
+            information.name = information.name.replace(/(\([^\)]*\))/gm, `(${name})`);
+            information.save();
+        }
+        this.save();
+    }
+
+    /**
      * Add information to a character.
      * @param {string} classification The clearance classification of the information.
      * @param {Information} information The information object to add.
@@ -136,7 +157,7 @@ class Character {
      * @param {string} classification The classification of the attribute. (public, private, gm)
      */
     async addAttribute(name, value, classification = 'public') {
-        const information = await Information.new(name, 'attribute', value);
+        const information = await Information.new(`(${this.name})${name}`, 'attribute', value);
         this.addInformation(classification, information);
     }
 
@@ -171,7 +192,7 @@ class Character {
      * @param {string} classification The classification of the skill. (public, private, gm)
      */
     async addSkill(name, value, classification = 'public') {
-        const information = await Information.new(name, 'skill', value);
+        const information = await Information.new(`(${this.name})${name}`, 'skill', value);
         this.addInformation(classification, information);
     }
 
@@ -206,7 +227,7 @@ class Character {
      * @param {string} classification The classification of the information. (public, private, gm)
      */
     async addGenericInformation(name, value, classification = 'public') {
-        const information = await Information.new(name, 'generic', value);
+        const information = await Information.new(`(${this.name})${name}`, 'generic', value);
         this.addInformation(classification, information);
     }
 
