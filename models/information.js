@@ -51,6 +51,8 @@ class Information {
             information.name = entry.name;
             information.type = entry.type;
             information.value = entry.value;
+            if (information.type in ['attribute', 'skill'])
+                information.value = parseInt(information.value);
             return information;
         } catch (error) {
             console.error(error);
