@@ -63,8 +63,34 @@ const Character = sequelize.define('character', {
     },
 });
 
+const Player = sequelize.define('player', {
+    id: {
+        type: DataTypes.BIGINT,
+        primaryKey: true,
+        autoIncrement: true,
+    },
+    guild: {
+        type: DataTypes.BIGINT,
+        allowNull: false,
+    },
+    member: {
+        type: DataTypes.BIGINT,
+        allowNull: false,
+    },
+    characters: {
+        type: DataTypes.JSON,
+        allowNull: false,
+        defaultValue: [],
+    },
+    category: {
+        type: DataTypes.BIGINT,
+        allowNull: false,
+    }
+});
+
 module.exports = {
     Information,
     Character,
+    Player,
     sequelize,
 };
