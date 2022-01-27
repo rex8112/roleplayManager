@@ -17,6 +17,11 @@ class Character {
     }
 
     // Static methods
+    /**
+     * Create a new character and add it to the database.
+     * @param {string} name The name of the character.
+     * @returns {Promise<Character>} A promise that resolves to the new character.
+     */
     static async new(name) {
         const character = new Character();
         character.name = name;
@@ -27,6 +32,11 @@ class Character {
         return character;
     }
 
+    /**
+     * Get a character from the database.
+     * @param {number} id The id of the character to retrieve.
+     * @returns {Promise<Character>} A promise that resolves to the character.
+     */
     static async get(id) {
         const character = new Character();
         const entry = await CDB.findOne({ where: { id } });

@@ -31,7 +31,7 @@ class Player {
         player.category = await guild.channels.create(member.displayName, { type: 'GUILD_CATEGORY' });
         const data = this.toJSON();
         delete data.id;
-        const entry = await PDB.create(data) // TODO: Create player in database
+        const entry = await PDB.create(data)
         player.id = entry.id;
         return player;
     }
@@ -64,7 +64,7 @@ class Player {
         delete data.id;
         await PDB.update(data, { where: { id: this.id } });
     }
-    
+
     /**
      * Returns the JSON object of the player.
      * @returns {Object} The JSON object of the player.
