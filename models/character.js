@@ -1,12 +1,14 @@
 // character.js
 const { Collection } = require("discord.js");
-const { Information } = require("../information");
+const { Information } = require("./information");
 
 class Character {
     constructor() {
+        this.id = 0;
         this.name = '';
-        this.member = null;
-        this.guild = null;
+        this.user = null;
+
+        this.knowledge = new Array();
 
         this.publicInformation = new Collection();
         this.privateInformation = new Collection();
@@ -75,6 +77,144 @@ class Character {
             throw new Error('Invalid classification');
         }
         return true;
+    }
+
+    /**
+     * Add an attribute to the character.
+     * @param {string} name The name of the attribute to add.
+     * @param {number} value The value of the attribute.
+     * @param {string} classification The classification of the attribute. (public, private, gm)
+     */
+    async addAttribute(name, value, classification = 'public') {
+        const information = await Information.new(name, 'attribute', value);
+        this.addInformation(classification, information);
+    }
+
+    /**
+     * 
+     * @param {Array<string>} classificationList A list of the classification of the attributes to retrieve. (public, private, gm)
+     * @returns {Collection<number, Information>} A collection of the attributes.
+     */
+    getAttributes(classificationList = ['public']) {
+        let attributes = new Collection();
+        if ('gm' in classificationList)
+            attributes = attributes.concat(this.gmInformation.filter(i => i.type === 'attribute'))
+        if ('private' in classificationList)
+            attributes = attributes.concat(this.privateInformation.filter(i => i.type === 'attribute'))
+        if ('public' in classificationList)
+            attributes = attributes.concat(this.publicInformation.filter(i => i.type === 'attribute'))
+        return attributes;
+    }
+
+    /**
+     * An alias for removeInformation.
+     * @param {number} id The id of the attribute to retrieve.
+     */
+    removeAttribute(id) {
+        this.removeInformation(id);
+    }
+
+    /**
+     * Add a skill to the character.
+     * @param {string} name The name of the skill to add.
+     * @param {number} value The value of the skill.
+     * @param {string} classification The classification of the skill. (public, private, gm)
+     */
+    async addSkill(name, value, classification = 'public') {
+        const information = await Information.new(name, 'skill', value);
+        this.addInformation(classification, information);
+    }
+
+    /**
+     * Get a collection of the skills.
+     * @param {array<string>} classificationList A list of the classification of the skills to retrieve. (public, private, gm)
+     * @returns {Collection<number, Information>} A collection of the skills.
+     */
+    getSkills(classificationList = ['public']) {
+        let skills = new Collection();
+        if ('gm' in classificationList)
+            skills = skills.concat(this.gmInformation.filter(i => i.type === 'skill'))
+        if ('private' in classificationList)
+            skills = skills.concat(this.privateInformation.filter(i => i.type === 'skill'))
+        if ('public' in classificationList)
+            skills = skills.concat(this.publicInformation.filter(i => i.type === 'skill'))
+        return skills;
+    }
+
+    /**
+     * An alias for removeInformation.
+     * @param {number} id The id of the skill to remove.
+     */
+    removeSkill(id) {
+        this.removeInformation(id);
+    }
+
+    /**
+     * Add generic information to the character.
+     * @param {string} name The name of the information to add.
+     * @param {string} value The value of the information.
+     * @param {string} classification The classification of the information. (public, private, gm)
+     */
+    async addGenericInformation(name, value, classification = 'public') {
+        const information = await Information.new(name, 'generic', value);
+        this.addInformation(classification, information);
+    }
+
+    /**
+     * Get a collection of the generic information.
+     * @param {array<string>} classificationList A list of the classification of the generic information to retrieve. (public, private, gm)
+     * @returns {Collection<number, Information>} A collection of the generic information.
+     */
+    getGenericInformation(classificationList = ['public']) {
+        let information = new Collection();
+        if ('gm' in classificationList)
+            information = information.concat(this.gmInformation.filter(i => i.type === 'generic'))
+        if ('private' in classificationList)
+            information = information.concat(this.privateInformation.filter(i => i.type === 'generic'))
+        if ('public' in classificationList)
+            information = information.concat(this.publicInformation.filter(i => i.type === 'generic'))
+        return information;
+    }
+
+    /**
+     * An alias for removeInformation.
+     * @param {number} id The id of the information to remove.
+     */
+    removeGenericInformation(id) {
+        this.removeInformation(id);
+    }
+
+    /**
+     * Convert the character to a JSON object.
+     * @returns {Object} The character's information in a JSON format.
+     */
+    toJSON() {
+        return {
+            id: this.id,
+            name: this.name,
+            user: this.user?.id,
+            knowledge: this.knowledge,
+            publicInformation: Array.from(this.publicInformation.keys()),
+            privateInformation: Array.from(this.privateInformation.keys()),
+            gmInformation: Array.from(this.gmInformation.keys())
+        }
+    }
+
+    /**
+     * Convert a JSON object to a character.
+     * @param {Object} json The JSON object to convert to a character.
+     * @returns The new character.
+     */
+    async static fromJSON(json) {
+        const character = new Character();
+        character.id = json.id;
+        character.name = json.name;
+        character.user = json.user;
+        character.knowledge = Array.from(json.knowledge);
+        character.publicInformation = new Collection(json.publicInformation.map(i => [i, await Information.get(i)]));
+        character.privateInformation = new Collection(json.privateInformation.map(i => [i, await Information.get(i)]));
+        character.gmInformation = new Collection(json.gmInformation.map(i => [i, await Information.get(i)]));
+        return character;
     }
 }
 
