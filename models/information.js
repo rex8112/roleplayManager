@@ -60,6 +60,13 @@ class Information {
 
     // Instance methods
     /**
+     * Save the information to the database.
+     */
+    async save() {
+        await IDB.update(this.toJSON(), { where: { id: this.id } });
+    }
+    
+    /**
      * Convert the information to a JSON object.
      * @returns {Object} The information object.
      */
