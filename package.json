@@ -13,6 +13,7 @@
   "license": "ISC",
   "dependencies": {
     "discord.js": "^13.6.0",
+    "download": "^8.0.0",
     "mariadb": "^2.5.5",
     "sequelize": "^6.14.1"
   }
