@@ -39,18 +39,25 @@ class Character {
      * @returns {Promise<Character>} A promise that resolves to the character.
      */
     static async get(id) {
-        const character = new Character();
         const entry = await CDB.findOne({ where: { id } });
         if (!entry) return null;
-        character.id = entry.id;
-        character.name = entry.name;
-        character.user = entry.user;
-        character.color = entry.color;
-        character.knowledge = Array.from(entry.knowledge);
-        character.publicInformation = new Collection(await Promise.all(entry.publicInformation.map(async i => [i, await Information.get(i)])));
-        character.privateInformation = new Collection(await Promise.all(entry.privateInformation.map(async i => [i, await Information.get(i)])));
-        character.gmInformation = new Collection(await Promise.all(entry.gmInformation.map(async i => [i, await Information.get(i)])));
+        const character = Character.fromJSON(entry);
         return character;
+    }
+    
+    /**
+     * Get a collection of characters owned by a user.
+     * @param {string} id The id of the user who owns the character.
+     * @returns {Promise<Collection<string, Character>>} A promise that resolves to a collection of characters.
+     */
+    static async getByUserId(id) {
+        const charactersCollection = new Collection();
+        const characters = await CDB.findAll({ where: { user: id } });
+        for (const data of characters) {
+            const character = await Character.fromJSON(data);
+            charactersCollection.set(character.id, character);
+        }
+        return charactersCollection;
     }
 
     /**
@@ -63,6 +70,7 @@ class Character {
         character.id = json.id;
         character.name = json.name;
         character.user = json.user;
+        character.color = json.color;
         character.knowledge = Array.from(json.knowledge);
         character.publicInformation = new Collection(json.publicInformation.map(async i => [i, await Information.get(i)]));
         character.privateInformation = new Collection(json.privateInformation.map(async i => [i, await Information.get(i)]));
