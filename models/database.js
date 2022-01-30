@@ -42,6 +42,11 @@ const Character = sequelize.define('character', {
         type: DataTypes.STRING,
         allowNull: false,
     },
+    color: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        defaultValue: '#FFFFFF',
+    },
     user: {
         type: DataTypes.BIGINT,
     },

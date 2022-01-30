@@ -8,6 +8,7 @@ class Character {
         this.id = 0;
         this.name = '';
         this.user = null;
+        this.color = '#ffffff';
 
         this.knowledge = new Array();
 
@@ -44,6 +45,7 @@ class Character {
         character.id = entry.id;
         character.name = entry.name;
         character.user = entry.user;
+        character.color = entry.color;
         character.knowledge = Array.from(entry.knowledge);
         character.publicInformation = new Collection(await Promise.all(entry.publicInformation.map(async i => [i, await Information.get(i)])));
         character.privateInformation = new Collection(await Promise.all(entry.privateInformation.map(async i => [i, await Information.get(i)])));
@@ -274,6 +276,7 @@ class Character {
             id: this.id,
             name: this.name,
             user: this.user?.id,
+            color: this.color,
             knowledge: this.knowledge,
             publicInformation: Array.from(this.publicInformation.keys()),
             privateInformation: Array.from(this.privateInformation.keys()),
