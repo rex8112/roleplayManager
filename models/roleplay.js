@@ -37,7 +37,7 @@ class Roleplay {
 
     // Static Methods
     /**
-     * 
+     * Create a new roleplay.
      * @param {Guild} guild The guild to create the roleplay in.
      * @param {string} name The name of the roleplay.
      * @param {GuildMember} gm The game master of the roleplay.
@@ -60,15 +60,53 @@ class Roleplay {
         return roleplay;
     }
 
+    /**
+     * Get a roleplay from the database.
+     * @param {Guild} guild The guild the roleplay is in.
+     * @param {number} id The id of the roleplay.
+     * @returns {Promise<Roleplay>} The roleplay object.
+     */
     static async get(guild, id) {
         const entry = await RDB.findOne({ where: { id, guild: guild.id } });
         if (!entry) return null;
+        const roleplay = Roleplay.fromJSON(guild, entry);
+        return roleplay;
+    }
+
+    /**
+     * Build a roleplay from a JSON object.
+     * @param {Guild} guild The guild the roleplay is in.
+     * @param {Object} data The data to create the roleplay from.
+     * @returns {Promise<Roleplay>} The roleplay object.
+     */
+    static async fromJSON(guild, data) {
         const roleplay = new Roleplay(guild);
-        roleplay.fromJSON(entry);
+        roleplay.id = data.id;
+        roleplay.name = data.name;
+        roleplay.description = data.description;
+        roleplay.gm = guild.members.resolve(data.gm);
+        roleplay.category = guild.channels.resolve(data.category);
+        roleplay.characters = new Collection();
+        for (const id of data.characters) {
+            const character = await Character.get(id);
+            roleplay.characters.set(id, character);
+        }
+        roleplay.act = data.act;
+        roleplay.chapter = data.chapter;
+        roleplay.round = data.round;
+        roleplay.turnOrder = data.turnOrder;
+        roleplay.turn = data.turn;
+        roleplay.turnDuration = data.turnDuration;
+        roleplay.turnTime = data.turnTime;
+        roleplay.settings = data.settings;
         return roleplay;
     }
 
     // Instance Methods
+    /**
+     * Returns the roleplay as a JSON object.
+     * @returns {Object} The JSON object of the roleplay.
+     */
     toJSON() {
         return {
             id: this.id,
@@ -86,27 +124,6 @@ class Roleplay {
             turnTime: this.turnTime,
             settings: this.settings,
         }
-    }
-
-    async fromJSON(data) {
-        this.id = data.id;
-        this.name = data.name;
-        this.description = data.description;
-        this.gm = this.guild.members.resolve(data.gm);
-        this.category = this.guild.channels.resolve(data.category);
-        this.characters = new Collection();
-        for (const id of data.characters) {
-            const character = await Character.get(id);
-            this.characters.set(id, character);
-        }
-        this.act = data.act;
-        this.chapter = data.chapter;
-        this.round = data.round;
-        this.turnOrder = data.turnOrder;
-        this.turn = data.turn;
-        this.turnDuration = data.turnDuration;
-        this.turnTime = data.turnTime;
-        this.settings = data.settings;
     }
 
     /**
@@ -201,7 +218,7 @@ class Roleplay {
     }
 
     /**
-     * Calculate the exact date and time the next turn has to occur.
+     * Calculate the exact date and time the next turn has to occur by.
      */
     calculateTurnTime() {
         if (this.turnDuration)
