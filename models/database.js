@@ -93,9 +93,67 @@ const Player = sequelize.define('player', {
     }
 });
 
+const Roleplay = sequelize.define('roleplay', {
+    id: {
+        type: DataTypes.BIGINT,
+        primaryKey: true,
+        autoIncrement: true,
+    },
+    name: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    description: {
+        type: DataTypes.STRING,
+    },
+    gm: {
+        type: DataTypes.BIGINT,
+        allowNull: false,
+    },
+    characters: {
+        type: DataTypes.JSON,
+        allowNull: false,
+    },
+    act: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 1,
+    },
+    chapter: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 1,
+    },
+    round: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 1,
+    },
+    turnOrder: {
+        type: DataTypes.JSON,
+        allowNull: false,
+    },
+    turn: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+    },
+    turnDuration: {
+        type: DataTypes.BIGINT,
+    },
+    turnTime: {
+        type: DataTypes.DATE,
+    },
+    settings: {
+        type: DataTypes.JSON,
+        allowNull: false,
+    },
+});
+
 module.exports = {
     Information,
     Character,
     Player,
+    Roleplay,
     sequelize,
 };
