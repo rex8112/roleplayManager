@@ -51,7 +51,7 @@ class Information {
             information.name = entry.name;
             information.type = entry.type;
             information.value = entry.value;
-            if (information.type in ['attribute', 'skill'])
+            if (['attribute', 'skill'].includes(information.type))
                 information.value = parseInt(information.value);
             return information;
         } catch (error) {
