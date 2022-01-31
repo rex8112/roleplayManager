@@ -12,6 +12,8 @@
   "author": "Riley Winkler",
   "license": "ISC",
   "dependencies": {
+    "@discordjs/rest": "^0.3.0",
+    "discord-api-types": "^0.26.1",
     "discord.js": "^13.6.0",
     "download": "^8.0.0",
     "mariadb": "^2.5.5",
