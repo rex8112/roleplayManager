@@ -152,6 +152,35 @@ const Roleplay = sequelize.define('roleplay', {
     },
 });
 
+const RoleplayPost = sequelize.define('roleplay_post', {
+    id: {
+        type: DataTypes.BIGINT,
+        primaryKey: true,
+        autoIncrement: true,
+    },
+    content: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    round: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 1,
+    },
+    chapter: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 1,
+    },
+    act: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 1,
+    },
+});
+RoleplayPost.belongsTo(Roleplay);
+RoleplayPost.belongsTo(Character);
+
 module.exports = {
     Information,
     Character,
