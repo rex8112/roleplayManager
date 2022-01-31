@@ -4,6 +4,7 @@ const download = require('download')
 const fs = require('fs')
 
 const { Character } = require('./character');
+const { Player } = require('./player');
 const { Roleplay: RDB } = require('./database');
 
 class Roleplay {
@@ -154,6 +155,14 @@ class Roleplay {
     getMainChannel() {
         return this.category.children.find(c => c.name === 'main');
     }
+    
+    /**
+     * 
+     * @returns {TextChannel} The channel that the roleplay information is in.
+     */
+    getInformationChannel() {
+        return this.category.children.find(c => c.name === 'information');
+    }
 
     /**
      * Post a message in the roleplay.
@@ -180,11 +189,11 @@ class Roleplay {
         const channel = this.getMainChannel();
         const embed = new MessageEmbed()
         .setColor(character.color)
-        .setAuthor({ name: character.name, iconURL: character.user.displayAvatarURL()})
+        .setAuthor({ name: character.name, iconURL: await Player.getByCharacter(character)?.member.displayAvatarURL()})
         .setDescription(parsed)
         .setFooter({ text: `${this.act}-${this.chapter}-${this.round}`});
         await channel.send(embed);
-        if (character.user.id in this.getWhosTurn().map(u => u.id)) {
+        if (character.playerId.id in this.getWhosTurn().map(u => u.id)) {
             this.posted(character);
         }
         return [true, 'Message Posted.'];
@@ -221,10 +230,11 @@ class Roleplay {
      * Calculate the exact date and time the next turn has to occur by.
      */
     calculateTurnTime() {
-        if (this.turnDuration)
+        if (this.turnDuration) {
             const date = new Date(Date.now() + this.turnDuration);
-        else
+        } else {
             const date = null;
+        }
         this.turnTime = date;
     }
 
