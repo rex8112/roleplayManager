@@ -1,11 +1,13 @@
 // roleplay.js
-const { Guild, GuildMember, Message, MessageEmbed, TextChannel, User } = require('discord.js');
+const { Guild, GuildMember, Message, MessageEmbed, TextChannel, MessageActionRow, MessageButton, Collection, MessageSelectMenu } = require('discord.js');
 const download = require('download')
 const fs = require('fs')
 
+const wait = require('util').promisify(setTimeout);
+
 const { Character } = require('./character');
 const { Player } = require('./player');
-const { Roleplay: RDB } = require('./database');
+const { Roleplay: RDB, RoleplayPost } = require('./database');
 
 class Roleplay {
     static DOWNLOAD_PATH = `../downloads/`;
@@ -21,6 +23,7 @@ class Roleplay {
         this.characters = new Collection();
         this.gm = null;
         this.category = null;
+        this.entry = null;
 
         this.act = 1;
         this.chapter = 1;
@@ -33,6 +36,7 @@ class Roleplay {
         this.turnTime = null;
         this.settings = {
             defaultDie: 20,
+            controlMessage: null
         }
     }
 
@@ -54,10 +58,13 @@ class Roleplay {
         await roleplay.category.createChannel('characters');
         await roleplay.category.createChannel('rolls');
         await roleplay.category.createChannel('discussion');
-        const data = this.toJSON();
+        const data = roleplay.toJSON();
         delete data.id;
         const entry = await RDB.create(data)
         roleplay.id = entry.id;
+        roleplay.entry = entry;
+
+        await roleplay.refreshControlMessage();
         return roleplay;
     }
 
@@ -77,29 +84,30 @@ class Roleplay {
     /**
      * Build a roleplay from a JSON object.
      * @param {Guild} guild The guild the roleplay is in.
-     * @param {Object} data The data to create the roleplay from.
+     * @param {Object} json The data to create the roleplay from.
      * @returns {Promise<Roleplay>} The roleplay object.
      */
-    static async fromJSON(guild, data) {
+    static async fromJSON(guild, json) {
         const roleplay = new Roleplay(guild);
-        roleplay.id = data.id;
-        roleplay.name = data.name;
-        roleplay.description = data.description;
-        roleplay.gm = guild.members.resolve(data.gm);
-        roleplay.category = guild.channels.resolve(data.category);
+        roleplay.id = json.id;
+        roleplay.name = json.name;
+        roleplay.description = json.description;
+        roleplay.gm = guild.members.resolve(json.gm);
+        roleplay.entry = json;
+        roleplay.category = guild.channels.resolve(json.category);
         roleplay.characters = new Collection();
-        for (const id of data.characters) {
+        for (const id of json.characters) {
             const character = await Character.get(id);
             roleplay.characters.set(id, character);
         }
-        roleplay.act = data.act;
-        roleplay.chapter = data.chapter;
-        roleplay.round = data.round;
-        roleplay.turnOrder = data.turnOrder;
-        roleplay.turn = data.turn;
-        roleplay.turnDuration = data.turnDuration;
-        roleplay.turnTime = data.turnTime;
-        roleplay.settings = data.settings;
+        roleplay.act = json.act;
+        roleplay.chapter = json.chapter;
+        roleplay.round = json.round;
+        roleplay.turnOrder = json.turnOrder;
+        roleplay.turn = json.turn;
+        roleplay.turnDuration = json.turnDuration;
+        roleplay.turnTime = json.turnTime;
+        roleplay.settings = json.settings;
         return roleplay;
     }
 
@@ -127,6 +135,37 @@ class Roleplay {
         }
     }
 
+    async save() {
+        const data = this.toJSON();
+        await RDB.update(data, { where: { id: this.id } });
+    }
+
+    /**
+     * Refresh the control panel.
+     * @returns {Promise<Message>} The message for the roleplay controls.
+     */
+    async refreshControlMessage() {
+        const channel = this.getInformationChannel();
+        if (this.settings.controlMessage) {
+            const oldMessage = await channel.messages.fetch(this.settings.controlMessage)
+            if (oldMessage) await oldMessage.delete();
+        }
+        const embed = new MessageEmbed()
+            .setTitle(`${this.name} Control Panel`)
+            .setDescription(`${this.description}\nAct: ${this.act}\nChapter: ${this.chapter}\nRound: ${this.round}`);
+        const actionRow = new MessageActionRow()
+            .addComponents(
+                new MessageButton()
+                    .setCustomId(`rp.${this.id}:post`)
+                    .setLabel('Post')
+                    .setStyle('PRIMARY')
+            );
+        const message = await channel.send({ embeds: [embed], components: [actionRow] });
+        this.settings.controlMessage = message.id;
+        this.save();
+        return message;
+    }
+
     /**
      * Returns a collection of all players in the roleplay.
      * @returns {Collection<string, GuildMember>} The players in the roleplay.
@@ -140,12 +179,14 @@ class Roleplay {
     }
 
     /**
-     * Get the users that can currently post in the roleplay.
-     * @returns {Array<GuildMember>} The the users who's turn it is.
+     * Get the userIDs that can currently post in the roleplay.
+     * @returns {Promise<Array<string>>} The the users who's turn it is.
      */
-    getWhosTurn() {
-        characters = this.guild.members.resolve(this.currentTurnOrder[0]);
-        return characters.map(c => c.user);
+    async getWhosTurn() {
+        const characters = /** @type {Array<Character>} */ (this.currentTurnOrder[0]);
+        const ids = characters.map(c => c.getUserId());
+        await Promise.all(ids);
+        return ids;
     }
 
     /**
@@ -187,16 +228,119 @@ class Roleplay {
         }
         const parsed = this.parseContent(content);
         const channel = this.getMainChannel();
+        const player = await Player.getByCharacter(channel.guild, character)
         const embed = new MessageEmbed()
-        .setColor(character.color)
-        .setAuthor({ name: character.name, iconURL: await Player.getByCharacter(character)?.member.displayAvatarURL()})
-        .setDescription(parsed)
-        .setFooter({ text: `${this.act}-${this.chapter}-${this.round}`});
+            .setColor(character.color)
+            .setAuthor({ name: character.name, iconURL: player?.member.displayAvatarURL()})
+            .setDescription(parsed)
+            .setFooter({ text: `${this.act}-${this.chapter}-${this.round}`});
         await channel.send(embed);
-        if (character.playerId.id in this.getWhosTurn().map(u => u.id)) {
+        await this.createPostEntry(character, content);
+        const canPostIds = await this.getWhosTurn();
+        if (canPostIds.includes(player.member.id)) {
             this.posted(character);
         }
         return [true, 'Message Posted.'];
+    }
+
+    async createPostEntry(content, character) {
+        const entry = await this.entry.createPost({
+            content: content,
+            round: this.round,
+            chapter: this.chapter,
+            act: this.act,
+        });
+        await entry.addCharacter(character.entry);
+    }
+
+    /**
+     * Wait for the messages to be collected and post them.
+     * @param {Player} player The player who is going to post.
+     */
+    async waitForPost(player) {
+        const options = new Array();
+        for (const character of player.characters.values()) {
+            if (this.characters.has(character.id)) {
+                options.push({
+                    label: character.name,
+                    description: `Choose ${character.name} to post.`,
+                    value: character.id,
+                });
+            }
+        }
+        const selectActionRow = new MessageActionRow()
+            .addComponents(
+                new MessageSelectMenu()
+                    .setCustomId(`rp.${this.id}:selectCharacter`)
+                    .setPlaceholder('Select a character to post.')
+                    .addOptions(options));
+        const embed = new MessageEmbed()
+            .setTitle(`Posting in ${this.name}`)
+            .setDescription(`Please select what character you would like to post as. Current Turn: ${this.currentTurnOrder[0].map(c => c.name).join(', ')}`)
+            .setColor('ORANGE');
+        /** @type {Message} */
+        let message;
+        /** @type {Character} */
+        let character;
+
+        if (options.length > 1) {
+            // If there is more than one character, show the select menu.
+            message = await player.member.send({ embeds: [embed], components: [selectActionRow] });
+            try{
+                const response = await message.awaitMessageComponent({ componentType: 'SELECT_MENU', time: 60000 })
+                character = await Character.get(response.values[0]);
+                embed.setDescription(`You have selected ${character.name} to post as.`);
+                await response.update({ embeds: [embed] });
+                await wait(1000);
+                await message.delete();
+            } catch (e) {
+                embed.setTitle('Timed out.');
+                embed.setDescription('You did not select a character in time.');
+                embed.setColor('RED');
+                await message.edit({ embeds: [embed], components: [] });
+                return;
+            }
+        } else if (options.length === 1) {
+            // If there is only one character, use that character.
+            character = player.characters.get(options[0].value);
+            embed.setDescription(`You are posting as ${character.name}.`);
+            embed.setColor(character.color);
+        } else {
+            // No characters to post as.
+            embed.setTitle('No characters.');
+            embed.setDescription('You do not have any characters to post as.');
+            embed.setColor('RED');
+            message = await player.member.send({ embeds: [embed], components: [] });
+            return;
+        }
+        embed.setDescription(`${embed.description}\nPlease enter as many messages as needed to post or upload a txt file. Reply with \`done\` when finished or \`cancel\` to cancel. Uploading a txt file will finish the post immediately.`);
+        if (!this.currentTurnOrder[0].includes(character)) {
+            embed.setDescription(`${embed.description}\nWARNING: IT IS NOT CURRENTLY YOUR TURN IN THE ROLEPLAY.`);
+        }
+        message = /** @type {Message} */ (await player.member.send({ embeds: [embed], components: [] }));
+        let repeat = true;
+        const messages = new Array();
+        while (repeat) {
+            const response = await message.awaitMessages({ max: 1, time: 600000 });
+            if (response.content.lowerCase() === 'done') {
+                repeat = false;
+            } else if (response.content.lowerCase() === 'cancel') {
+                await message.delete();
+                return;
+            } else if (response.attachments.size > 0 && response.attachments.first().name.endsWith('.txt')) {
+                messages.push(response);
+                repeat = false;
+            } else {
+                messages.push(response);
+            }
+        }
+        embed.setDescription('Posting...');
+        await message.edit({ embeds: [embed], components: [] });
+        await this.post(messages, character);
+    }
+
+    async handleInteraction(interaction) {
+
     }
 
     /**
@@ -205,7 +349,7 @@ class Roleplay {
      */
     posted(character) {
         const currentTurn = this.currentTurnOrder[0];
-        if (character in currentTurn) {
+        if (currentTurn.includes(character)) {
             const index = currentTurn.indexOf(character);
             currentTurn.splice(index, 1);
         }
