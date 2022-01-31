@@ -111,6 +111,14 @@ class Character {
     }
 
     /**
+     * Get the discord id of the user who owns the character.
+     * @returns {Promise<string>} The discord id of the user who owns the character.
+     */
+    async getUserId() {
+        return await this.entry.getPlayer()?.member;
+    }
+
+    /**
      * Add information to a character.
      * @param {string} classification The clearance classification of the information.
      * @param {Information} information The information object to add.
