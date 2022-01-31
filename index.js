@@ -29,12 +29,12 @@ for (const file of eventFiles) {
 
 for (const file of commandsFiles) {
     const command = require(`./commands/${file}`);
-    client.commands.set(command.name, command);
+    client.commands.set(command.data.name, command);
 }
 
 for (const file of contextFiles) {
     const context = require(`./contexts/${file}`);
-    client.contexts.set(context.name, context);
+    client.contexts.set(context.data.name, context);
 }
 
 client.on('interactionCreate', async interaction => {
