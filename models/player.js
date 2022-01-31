@@ -65,6 +65,19 @@ class Player {
     }
 
     /**
+     * Get a player using a character instance.
+     * @param {Guild} guild 
+     * @param {Character} character The character to get the player of
+     * @returns {Promise<Player>} The player object.
+     */
+    static async getByCharacter(guild, character) {
+        const entry = await character.entry.getPlayer();
+        if (!entry) return null;
+        const player = await Player.fromJSON(guild, entry);
+        return player;
+    }
+
+    /**
      * Builds a player from a JSON object.
      * @param {Guild} guild The guild of the player.
      * @param {Object} json The JSON object of the player.
