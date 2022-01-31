@@ -6,8 +6,9 @@ const { Character: CDB } = require('./database');
 class Character {
     constructor() {
         this.id = 0;
+        this.entry = null;
         this.name = '';
-        this.user = null;
+        this.playerId = null;
         this.color = '#ffffff';
 
         this.knowledge = new Array();
@@ -30,6 +31,7 @@ class Character {
         delete data.id;
         const entry = await CDB.create(data);
         character.id = entry.id;
+        character.entry = entry;
         return character;
     }
 
@@ -41,7 +43,7 @@ class Character {
     static async get(id) {
         const entry = await CDB.findOne({ where: { id } });
         if (!entry) return null;
-        const character = Character.fromJSON(entry);
+        const character = await Character.fromJSON(entry);
         return character;
     }
     
@@ -69,12 +71,13 @@ class Character {
         const character = new Character();
         character.id = json.id;
         character.name = json.name;
-        character.user = json.user;
+        character.entry = json;
+        character.playerId = json.playerId;
         character.color = json.color;
         character.knowledge = Array.from(json.knowledge);
-        character.publicInformation = new Collection(json.publicInformation.map(async i => [i, await Information.get(i)]));
-        character.privateInformation = new Collection(json.privateInformation.map(async i => [i, await Information.get(i)]));
-        character.gmInformation = new Collection(json.gmInformation.map(async i => [i, await Information.get(i)]));
+        character.publicInformation = new Collection(await Promise.all(json.publicInformation.map(async i => [i, await Information.get(i)])));
+        character.privateInformation = new Collection(await Promise.all(json.privateInformation.map(async i => [i, await Information.get(i)])));
+        character.gmInformation = new Collection(await Promise.all(json.gmInformation.map(async i => [i, await Information.get(i)])));
         return character;
     }
 
@@ -283,7 +286,7 @@ class Character {
         return {
             id: this.id,
             name: this.name,
-            user: this.user?.id,
+            user: this.playerId?.id,
             color: this.color,
             knowledge: this.knowledge,
             publicInformation: Array.from(this.publicInformation.keys()),
