@@ -178,7 +178,8 @@ const RoleplayPost = sequelize.define('roleplay_post', {
         defaultValue: 1,
     },
 });
-RoleplayPost.belongsTo(Roleplay);
+Roleplay.hasMany(RoleplayPost, { as: 'Posts', foreignKey: 'roleplayId', sourceKey: 'id' });
+RoleplayPost.belongsTo(Roleplay, { as: 'Roleplay', foreignKey: 'roleplayId', targetKey: 'id' });
 RoleplayPost.belongsTo(Character);
 
 module.exports = {
@@ -186,5 +187,6 @@ module.exports = {
     Character,
     Player,
     Roleplay,
+    RoleplayPost,
     sequelize,
 };
