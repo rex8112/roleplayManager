@@ -92,6 +92,8 @@ const Player = sequelize.define('player', {
         allowNull: false,
     }
 });
+Player.hasMany(Character, { as: 'Characters', foreignKey: 'playerId', sourceKey: 'id' });
+Character.belongsTo(Player, { as: 'Player', foreignKey: 'playerId', targetKey: 'id' });
 
 const Roleplay = sequelize.define('roleplay', {
     id: {
