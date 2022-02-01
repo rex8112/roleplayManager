@@ -1,5 +1,5 @@
 // character.js
-const { Collection } = require('discord.js');
+const { Collection, Guild, TextChannel, MessageEmbed, Message } = require('discord.js');
 const { Information } = require('./information');
 const { Character: CDB } = require('./database');
 
@@ -63,6 +63,82 @@ class Character {
     }
 
     /**
+     * Build a new character.
+     * @param {TextChannel} channel The channel to build the character in.
+     */
+    static async build(channel) {
+        const data = {
+            name: '',
+            color: '#ffffff',
+        }
+        const embed = new MessageEmbed()
+            .setTitle('Build a new character')
+            .setColor(data.color);
+        let repeat = true;
+        /** @type {Message} */
+        let message;
+        let keys = Object.keys(data);
+        message = await channel.send({ embeds: [embed] });
+        let m;
+        while (repeat) {
+            let str = '';
+            for(const [key, value] of Object.entries(data)) {
+                str += `${key}: ${value}\n`;
+            }
+            embed.setDescription(`Current data:\n${str}`);
+            embed.setFooter({ text: 'Input validation does not occur until after you say finish.'});
+            embed.setColor(data.color);
+            let fields = new Array();
+            fields.push(
+                {
+                    name: 'Available Commands:',
+                    value: '`set <key> <value>`\n`finish`\n`cancel`',
+                },
+                {
+                    name: 'Important Links:',
+                    value: '[Hex Color Picker](https://www.w3schools.com/colors/colors_picker.asp)',
+                }
+            )
+            embed.setFields(fields);
+            await message.edit({ embeds: [embed] });
+            const response = await channel.awaitMessages({ max: 1, time: 600_000 });
+            if (response.size === 0) {
+                await channel.send('You did not respond in time. Cancelling.');
+                return null;
+            }
+            const responseMessage = response.first();
+            const regex = /set ([a-z]{1,25}) ([ #a-zA-Z0-9]{1,26})/gm
+            if (responseMessage.content === 'finish') {
+                repeat = false;
+                break;
+            } else if (responseMessage.content === 'cancel') {
+                await channel.send('Cancelled.');
+                return null;                
+            } else if ((m = regex.exec(responseMessage.content)) !== null) {
+                const key = m[1];
+                const value = m[2];
+                if (keys.includes(key)) {
+                    data[key] = value;
+                }
+            }
+        }
+        if (data.name === '') {
+            await channel.send('You must enter a name.');
+            return null;
+        } else if (!data.color.startsWith('#') || data.color.length !== 7) {
+            await channel.send('You must enter a valid hex color.');
+            return null;
+        }
+
+        const character = await Character.new(data.name);
+        character.color = data.color;
+        delete data.name;
+        delete data.color;
+        await character.save();
+        return character;
+    }
+
+    /**
      * Convert a JSON object to a character.
      * @param {Object} json The JSON object to convert to a character.
      * @returns The new character.
@@ -116,6 +192,19 @@ class Character {
      */
     async getUserId() {
         return await this.entry.getPlayer()?.member;
+    }
+
+    /**
+     * Get the role of the character.
+     * @param {Guild} guild The guild the character is in.
+     */
+    getRole(guild) {
+        return guild.roles.cache.find(r => r.name === this.name);
+    }
+
+    getChannel(guild) {
+        const channelName = this.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        return guild.channels.cache.find(c => c.name === channelName);
     }
 
     /**
