@@ -6,7 +6,8 @@ const client = new Client({
     intents: [
         Intents.FLAGS.GUILDS,
         Intents.FLAGS.GUILD_MESSAGES,
-        Intents.FLAGS.GUILD_MEMBERS
+        Intents.FLAGS.GUILD_MEMBERS,
+        Intents.FLAGS.DIRECT_MESSAGES,
     ]
 })
 
@@ -38,7 +39,7 @@ for (const file of contextFiles) {
 }
 
 client.on('interactionCreate', async interaction => {
-    if (!interaction.isCommand() && !interaction.isContext()) return;
+    if (!interaction.isCommand() && !interaction.isContextMenu()) return;
 
     let command;
     if (interaction.isCommand()) {
