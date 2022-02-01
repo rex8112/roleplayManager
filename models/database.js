@@ -112,6 +112,14 @@ const Roleplay = sequelize.define('roleplay', {
         type: DataTypes.BIGINT,
         allowNull: false,
     },
+    guild: {
+        type: DataTypes.BIGINT,
+        allowNull: false,
+    },
+    category: {
+        type: DataTypes.BIGINT,
+        allowNull: false,
+    },
     characters: {
         type: DataTypes.JSON,
         allowNull: false,
@@ -159,8 +167,13 @@ const RoleplayPost = sequelize.define('roleplay_post', {
         autoIncrement: true,
     },
     content: {
-        type: DataTypes.STRING,
+        type: DataTypes.TEXT,
         allowNull: false,
+    },
+    messages: {
+        type: DataTypes.JSON,
+        allowNull: false,
+        defaultValue: [],
     },
     round: {
         type: DataTypes.INTEGER,
