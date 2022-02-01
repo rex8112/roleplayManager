@@ -163,6 +163,8 @@ const Roleplay = sequelize.define('roleplay', {
         allowNull: false,
     },
 });
+Roleplay.hasMany(Character, { as: 'Characters', foreignKey: 'roleplayId', sourceKey: 'id' });
+Character.belongsTo(Roleplay, { as: 'Roleplay', foreignKey: 'roleplayId', targetKey: 'id' });
 
 const RoleplayPost = sequelize.define('roleplay_post', {
     id: {
