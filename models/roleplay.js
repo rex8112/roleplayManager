@@ -104,10 +104,10 @@ class Roleplay {
         roleplay.id = json.id;
         roleplay.name = json.name;
         roleplay.description = json.description;
-        roleplay.gm = guild.members.resolve(json.gm);
+        roleplay.gm = await guild.members.fetch(json.gm);
         roleplay.guild = guild;
         roleplay.entry = json;
-        roleplay.category = guild.channels.resolve(json.category);
+        roleplay.category = await guild.channels.fetch(json.category);
         roleplay.characters = new Collection();
         for (const id of json.characters) {
             const character = await Character.get(id);
@@ -168,7 +168,7 @@ class Roleplay {
         }
         const embed = new MessageEmbed()
             .setTitle(`${this.name} Control Panel`)
-            .setDescription(`${this.description}\n\nCurrent Turn: ${this.currentTurnOrder[0].map(m => this.characters.get(m)?.name).join(', ')}\n\nAct: ${this.act}\nChapter: ${this.chapter}\nRound: ${this.round}`);
+            .setDescription(`${this.description}\n\nCurrent Turn: ${this.currentTurnOrder[0]?.map(m => this.characters.get(m)?.name).join(', ')}\n\nAct: ${this.act}\nChapter: ${this.chapter}\nRound: ${this.round}`);
         const actionRow = new MessageActionRow()
             .addComponents(
                 new MessageButton()
@@ -191,6 +191,16 @@ class Roleplay {
         this.settings.controlMessage = message.id;
         this.save();
         return message;
+    }
+
+    /**
+     * Add a character to the roleplay.
+     * @param {Character} character The character to add.
+     */
+    async addCharacter(character) {
+        this.characters.set(character.id, character);
+        await this.entry.addCharacters(character.entry);
+        await this.save();
     }
 
     /**
@@ -462,9 +472,35 @@ class Roleplay {
             await interaction.editReply({ content: 'You are not registered.' });
             return false;
         } else if (command === 'character') {
+            let player = await Player.getByMemberId(interaction.guild, interaction.user.id);
+            if (!player) {
+                player = await Player.new(interaction.guild, interaction.member);
+            }
+            const channel = await player.category.createChannel('creating-character');
+            await channel.permissionOverwrites.create(this.gm, {
+                VIEW_CHANNEL: true,
+            });
+            await interaction.editReply({ content: `Please head to <#${channel.id}> to create your character.` });
+            const character = await Character.build(channel);
+            if (character === null) {
+                await interaction.editReply({ content: 'Could not create character.' });
+                await wait(5000);
+                await channel.delete();
+                return false;
+            }
+            let channelName = character.name;
+            channelName = channelName.toLowerCase();
+            channelName = channelName.replace(/[^a-z0-9]/g, '');
+            await channel.edit({ name: channelName });
+            await player.addCharacter(character);
+            await this.addCharacter(character);
 
+            const role = await interaction.guild.roles.create({ name: character.name, color: character.color });
+            await interaction.member.roles.add(role);
+
+            await interaction.editReply({ content: 'Character created.' });
         } else if (command === 'refresh') {
-            await this.refresh();
+            await this.refreshControlMessage();
             await interaction.editReply({ content: 'Refreshed.' });
             return true;
         }
