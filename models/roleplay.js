@@ -7,7 +7,7 @@ const wait = require('util').promisify(setTimeout);
 
 const { Character } = require('./character');
 const { Player } = require('./player');
-const { Roleplay: RDB, RoleplayPost } = require('./database');
+const { Roleplay: RDB, RoleplayPost, Headers } = require('./database');
 
 class Roleplay {
     static DOWNLOAD_PATH = `./downloads/`;
@@ -117,6 +117,7 @@ class Roleplay {
         roleplay.chapter = json.chapter;
         roleplay.round = json.round;
         roleplay.turnOrder = json.turnOrder;
+        roleplay.currentTurnOrder = json.currentTurnOrder;
         roleplay.turn = json.turn;
         roleplay.turnDuration = json.turnDuration;
         roleplay.turnTime = json.turnTime;
@@ -142,6 +143,7 @@ class Roleplay {
             chapter: this.chapter,
             round: this.round,
             turnOrder: this.turnOrder,
+            currentTurnOrder: this.currentTurnOrder,
             turn: this.turn,
             turnDuration: this.turnDuration,
             turnTime: this.turnTime,
@@ -166,18 +168,65 @@ class Roleplay {
         }
         const embed = new MessageEmbed()
             .setTitle(`${this.name} Control Panel`)
-            .setDescription(`${this.description}\nAct: ${this.act}\nChapter: ${this.chapter}\nRound: ${this.round}`);
+            .setDescription(`${this.description}\n\nCurrent Turn: ${this.currentTurnOrder[0].map(m => this.characters.get(m)?.name).join(', ')}\n\nAct: ${this.act}\nChapter: ${this.chapter}\nRound: ${this.round}`);
         const actionRow = new MessageActionRow()
             .addComponents(
                 new MessageButton()
                     .setCustomId(`rp.${this.id}:post`)
                     .setLabel('Post')
-                    .setStyle('PRIMARY')
+                    .setStyle('PRIMARY'),
+                new MessageButton()
+                    .setCustomId(`rp.${this.id}:character`)
+                    .setLabel('Create Character')
+                    .setStyle('SUCCESS'),
             );
-        const message = await channel.send({ embeds: [embed], components: [actionRow] });
+        const actionRow2 = new MessageActionRow()
+            .addComponents(
+                new MessageButton()
+                    .setCustomId(`rp.${this.id}:refresh`)
+                    .setLabel('Refresh')
+                    .setStyle('SECONDARY'),
+            );
+        const message = await channel.send({ embeds: [embed], components: [actionRow, actionRow2] });
         this.settings.controlMessage = message.id;
         this.save();
         return message;
+    }
+
+    /**
+     * Set the turn order. Resets the current round.
+     * @param {Array<string[]>} turnOrder 2D Array of character ids.
+     */
+    setTurnOrder(turnOrder) {
+        this.turnOrder = turnOrder;
+        this.currentTurnOrder = turnOrder.slice();
+        this.save();
+        this.refreshControlMessage();
+    }
+
+    async incrementChapter(title) {
+        this.chapter++;
+        this.round = 1;
+        const chapterTitle = title ? `: ${title}` : '';
+        const embed = new MessageEmbed()
+            .setTitle(`${this.name} Chapter ${this.chapter}${chapterTitle}`)
+            .setColor('GREEN');
+        const channel = this.getMainChannel();
+        const message = await channel.send({ embeds: [embed] });
+        await this.createHeaderEntry(title, this.act, this.chapter, message);
+    }
+    
+    async incrementAct(title) {
+        this.act++;
+        this.chapter = 1;
+        this.round = 1;
+        const actTitle = title ? `: ${title}` : '';
+        const embed = new MessageEmbed()
+            .setTitle(`${this.name} Act ${this.act}${actTitle}`)
+            .setColor('GREEN');
+        const channel = this.getMainChannel();
+        const message = await channel.send({ embeds: [embed] });
+        await this.createHeaderEntry(title, this.act, this.chapter, message);
     }
 
     /**
@@ -223,7 +272,7 @@ class Roleplay {
      * Post a message in the roleplay.
      * @param {Array<Message>} messages The messages to post.
      * @param {Character} character The character to post as.
-     * @returns {Promise<Array<boolean, string>>} The results of the post.
+     * @returns {Promise<Message[]>} The messages posted.
      */
     async post(messages, character) {
         let content = '';
@@ -233,7 +282,7 @@ class Roleplay {
                 await download(url, Roleplay.DOWNLOAD_PATH, { filename: `${this.id}_tmp.txt` })
             } catch (e) {
                 console.error(e);
-                return [false, 'Failed to download file.'];
+                return [];
             }
             const file = Roleplay.DOWNLOAD_PATH + `${this.id}_tmp.txt`;
             content = fs.readFileSync(file, 'utf8');
@@ -258,7 +307,7 @@ class Roleplay {
         await this.createPostEntry(content, character, posts);
 
         this.posted(character);
-        return [true, 'Message Posted.'];
+        return posts;
     }
 
     /**
@@ -277,6 +326,24 @@ class Roleplay {
             act: this.act,
         });
         await entry.setCharacter(character.entry);
+        return entry;
+    }
+    
+    /**
+     * Create a header entry for a table of contents later.
+     * @param {string} title The title of the header.
+     * @param {number} act The act of the header.
+     * @param {number} chapter The chapter of the header.
+     * @param {Message} message The message that was posted.
+     */
+    async createHeaderEntry(title, act, chapter, message) {
+        const entry = await this.entry.createHeader({
+            title: title,
+            act: act,
+            chapter: chapter,
+            messageLink: message?.url,
+        })
+        return entry;
     }
 
     /**
@@ -363,7 +430,18 @@ class Roleplay {
         }
         embed.setDescription('Posting...');
         await message.edit({ embeds: [embed], components: [] });
-        await this.post(messages, character);
+        const postedMessages = await this.post(messages, character);
+        // Create a goto hyperlink.
+        if (postedMessages.length > 0) {
+            embed.setDescription('Posted!');
+            embed.setColor('GREEN');
+            const row = new MessageActionRow()
+                .addComponents(
+                    new MessageButton()
+                        .setLabel('Goto')
+                        .setURL(postedMessages[0].url));
+            await message.edit({ embeds: [embed], components: [row] });
+        }
         return true;
     }
 
@@ -383,6 +461,12 @@ class Roleplay {
             }
             await interaction.editReply({ content: 'You are not registered.' });
             return false;
+        } else if (command === 'character') {
+
+        } else if (command === 'refresh') {
+            await this.refresh();
+            await interaction.editReply({ content: 'Refreshed.' });
+            return true;
         }
     }
 
