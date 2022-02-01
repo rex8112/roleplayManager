@@ -143,6 +143,10 @@ const Roleplay = sequelize.define('roleplay', {
         type: DataTypes.JSON,
         allowNull: false,
     },
+    currentTurnOrder: {
+        type: DataTypes.JSON,
+        allowNull: false,
+    },
     turn: {
         type: DataTypes.INTEGER,
         allowNull: false,
@@ -195,11 +199,36 @@ Roleplay.hasMany(RoleplayPost, { as: 'Posts', foreignKey: 'roleplayId', sourceKe
 RoleplayPost.belongsTo(Roleplay, { as: 'Roleplay', foreignKey: 'roleplayId', targetKey: 'id' });
 RoleplayPost.belongsTo(Character);
 
+const Headers = sequelize.define('headers', {
+    id: {
+        type: DataTypes.BIGINT,
+        primaryKey: true,
+        autoIncrement: true,
+    },
+    title: {
+        type: DataTypes.STRING,
+    },
+    act: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+    },
+    chapter: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+    },
+    messageLink: {
+        type: DataTypes.STRING,
+    },
+});
+Roleplay.hasMany(Headers, { as: 'Headers', foreignKey: 'roleplayId', sourceKey: 'id' });
+Headers.belongsTo(Roleplay, { as: 'Roleplay', foreignKey: 'roleplayId', targetKey: 'id' });
+
 module.exports = {
     Information,
     Character,
     Player,
     Roleplay,
     RoleplayPost,
+    Headers,
     sequelize,
 };
