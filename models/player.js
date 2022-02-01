@@ -30,7 +30,19 @@ class Player {
     static async new(guild, member) {
         const player = new Player(guild);
         player.member = member;
-        player.category = await guild.channels.create(member.displayName, { type: 'GUILD_CATEGORY' });
+        const permissions = [
+            {
+                id: member,
+                allow: ['VIEW_CHANNEL'],
+                type: 'member'
+            },
+            {
+                id: guild.roles.everyone,
+                deny: ['VIEW_CHANNEL'],
+                type: 'role'
+            }
+        ]
+        player.category = await guild.channels.create(member.displayName, { type: 'GUILD_CATEGORY', permissionOverwrites: permissions });
         const data = player.toJSON();
         delete data.id;
         const entry = await PDB.create(data)
