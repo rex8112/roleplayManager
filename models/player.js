@@ -58,7 +58,7 @@ class Player {
      * @returns {Promise<Player>} The player object.
      */
     static async getByMemberId(guild, memberId) {
-        const entry = await PDB.findOne({ where: { member: memberId } });
+        const entry = await PDB.findOne({ where: { member: memberId, guild: guild.id } });
         if (!entry) return null;
         const player = await Player.fromJSON(guild, entry);
         return player;
