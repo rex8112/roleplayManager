@@ -36,7 +36,9 @@ class Roleplay {
         this.turnTime = null;
         this.settings = {
             defaultDie: 20,
-            controlMessage: null
+            controlMessage: null,
+            gmMessage: null,
+            gmCharacter: null,
         }
     }
 
@@ -49,13 +51,43 @@ class Roleplay {
      * @returns {Promise<Roleplay>} The roleplay object.
      */
     static async new(guild, name, gm) {
+        const permissionOverwrites = [
+            {
+                id: gm.id,
+                allow: ['VIEW_CHANNEL'],
+                type: 'member',
+            },
+            {
+                id: guild.me.id,
+                allow: ['VIEW_CHANNEL'],
+                type: 'member',
+            },
+            {
+                id: guild.roles.everyone.id,
+                deny: ['VIEW_CHANNEL'],
+                type: 'role',
+            }
+        ];
+        const mainPermissionOverwrites = [
+            {
+                id: guild.me.id,
+                allow: ['SEND_MESSAGES'],
+                type: 'member',
+            },
+            {
+                id: guild.roles.everyone.id,
+                deny: ['SEND_MESSAGES'],
+                type: 'role',
+            }
+        ];
         const roleplay = new Roleplay(guild);
         roleplay.name = name;
         roleplay.gm = gm;
         roleplay.category = await guild.channels.create(name, { type: 'GUILD_CATEGORY' });
-        await roleplay.category.createChannel('main');
-        await roleplay.category.createChannel('information');
-        await roleplay.category.createChannel('characters');
+        await roleplay.category.createChannel('main', { permissionOverwrites: mainPermissionOverwrites });
+        await roleplay.category.createChannel('information', { permissionOverwrites: mainPermissionOverwrites });
+        await roleplay.category.createChannel('characters', { permissionOverwrites: mainPermissionOverwrites });
+        await roleplay.category.createChannel('gm', { permissionOverwrites });
         await roleplay.category.createChannel('rolls');
         await roleplay.category.createChannel('discussion');
         const data = roleplay.toJSON();
@@ -63,6 +95,15 @@ class Roleplay {
         const entry = await RDB.create(data)
         roleplay.id = entry.id;
         roleplay.entry = entry;
+
+        let gmPlayer = await Player.getByMemberId(guild, gm.id);
+        if (!gmPlayer) gmPlayer = await Player.new(guild, gm);
+        const gmCharacter = await Character.new('GM');
+        gmCharacter.color = '#ff9900';
+        gmPlayer.addCharacter(gmCharacter);
+        roleplay.addCharacter(gmCharacter);
+        gmCharacter.save();
+        roleplay.settings.gmCharacter = gmCharacter.id;
 
         await roleplay.refreshControlMessage();
         return roleplay;
@@ -163,12 +204,16 @@ class Roleplay {
     async refreshControlMessage() {
         const channel = this.getInformationChannel();
         if (this.settings.controlMessage) {
-            const oldMessage = await channel.messages.fetch(this.settings.controlMessage)
+            let oldMessage;
+            try {
+                oldMessage = await channel.messages.fetch(this.settings.controlMessage)
+            } catch (e) {}
             if (oldMessage) await oldMessage.delete();
         }
+        const currentTurnString = this.getCurrentTurn()?.map(m => this.characters.get(m)?.name).join(', ') || this.getGMCharacter().name;
         const embed = new MessageEmbed()
             .setTitle(`${this.name} Control Panel`)
-            .setDescription(`${this.description}\n\nCurrent Turn: ${this.currentTurnOrder[0]?.map(m => this.characters.get(m)?.name).join(', ')}\n\nAct: ${this.act}\nChapter: ${this.chapter}\nRound: ${this.round}`);
+            .setDescription(`${this.description}\n\nCurrent Turn: ${currentTurnString}\n\nAct: ${this.act}\nChapter: ${this.chapter}\nRound: ${this.round}`);
         const actionRow = new MessageActionRow()
             .addComponents(
                 new MessageButton()
@@ -189,7 +234,52 @@ class Roleplay {
             );
         const message = await channel.send({ embeds: [embed], components: [actionRow, actionRow2] });
         this.settings.controlMessage = message.id;
-        this.save();
+        await this.save();
+        await this.refreshGMControlMessage();
+        return message;
+    }
+
+    async refreshGMControlMessage() {
+        const channel = this.getGMChannel();
+        if (this.settings.gmMessage) {
+            let oldMessage;
+            try {
+                oldMessage = await channel.messages.fetch(this.settings.gmMessage)
+            } catch (e) {}
+            if (oldMessage) await oldMessage.delete();
+        }
+        const embed = new MessageEmbed()
+            .setTitle(`${this.name} Control Panel`)
+            .setDescription(`${this.description}\n\nCurrent Turn: ${this.currentTurnOrder[0]?.map(m => this.characters.get(m)?.name).join(', ')}\n\nAct: ${this.act}\nChapter: ${this.chapter}\nRound: ${this.round}`);
+        const actionRow = new MessageActionRow()
+            .addComponents(
+                new MessageButton()
+                    .setCustomId(`rp.${this.id}:gmpost`)
+                    .setLabel('GM Post')
+                    .setStyle('PRIMARY'),
+                new MessageButton()
+                    .setCustomId(`rp.${this.id}:incrementAct`)
+                    .setLabel('New Act')
+                    .setStyle('SUCCESS'),
+                new MessageButton()
+                    .setCustomId(`rp.${this.id}:incrementChapter`)
+                    .setLabel('New Chapter')
+                    .setStyle('SUCCESS'),
+            );
+        const actionRow2 = new MessageActionRow()
+            .addComponents(
+                new MessageButton()
+                    .setCustomId(`rp.${this.id}:undo`)
+                    .setLabel('Undo')
+                    .setStyle('DANGER'),
+                new MessageButton()
+                    .setCustomId(`rp.${this.id}:resetRound`)
+                    .setLabel('Reset Round')
+                    .setStyle('DANGER'),
+            );
+        const message = await channel.send({ embeds: [embed], components: [actionRow, actionRow2] });
+        this.settings.gmMessage = message.id;
+        await this.save();
         return message;
     }
 
@@ -209,9 +299,30 @@ class Roleplay {
      */
     setTurnOrder(turnOrder) {
         this.turnOrder = turnOrder;
-        this.currentTurnOrder = turnOrder.slice();
+        this.currentTurnOrder = [];
         this.save();
         this.refreshControlMessage();
+    }
+
+    /**
+     * Get the current turn.
+     * @returns {number[]} The current turn.
+     */
+    getCurrentTurn() {
+        return this.currentTurnOrder[0];
+    }
+
+    /**
+     * Get if it is the character's turn.
+     * @param {Character} character The character to check.
+     * @returns {boolean} If it is the character's turn.
+     */
+    isTurn(character) {
+        if (this.getCurrentTurn()) {
+            return this.getCurrentTurn().includes(character.id);
+        } else {
+            return character.id === this.getGMCharacter().id;
+        }
     }
 
     async incrementChapter(title) {
@@ -253,11 +364,11 @@ class Roleplay {
 
     /**
      * Get the userIDs that can currently post in the roleplay.
-     * @returns {Promise<Array<string>>} The the users who's turn it is.
+     * @returns {Promise<Array<string>>} The the user ids of who's turn it is.
      */
     async getWhosTurn() {
-        const characters = /** @type {Array<Character>} */ (this.currentTurnOrder[0]);
-        const ids = characters?.map(c => c.getUserId());
+        const characters = this.getCurrentTurn();
+        const ids = characters?.map(c => this.characters.get(c)?.getUserId());
         if (ids) await Promise.all(ids);
         return ids ?? [];
     }
@@ -276,6 +387,22 @@ class Roleplay {
      */
     getInformationChannel() {
         return this.category.children.find(c => c.name === 'information');
+    }
+
+    /**
+     * 
+     * @returns {TextChannel} The channel that the roleplay gm is in.
+     */
+    getGMChannel() {
+        return this.category.children.find(c => c.name === 'gm');
+    }
+
+    /**
+     * Get the GM character for this roleplay.
+     * @returns {Character} The gm character.
+     */
+    getGMCharacter() {
+        return this.characters.get(this.settings.gmCharacter);
     }
 
     /**
@@ -304,6 +431,7 @@ class Roleplay {
         const channel = this.getMainChannel();
         const player = await Player.getByCharacter(channel.guild, character)
         const posts = new Array();
+        if (character.id === this.settings.gmCharacter) this.newRound();
         for (const [i, message] of parsed.entries()) {
             const embed = new MessageEmbed()
                 .setColor(character.color)
@@ -358,17 +486,28 @@ class Roleplay {
 
     /**
      * Wait for the messages to be collected and post them.
-     * @param {Player} player The player who is going to post.
+     * @param {Player | string} player The player who is going to post or 'gm' for the GM.
      */
     async waitForPost(player) {
         const options = new Array();
-        for (const character of player.characters.values()) {
-            if (this.characters.has(character.id)) {
-                options.push({
-                    label: character.name,
-                    description: `Choose ${character.name} to post.`,
-                    value: `${character.id}`,
-                });
+        let gmCharacter;
+        if (player === 'gm') {
+            player = await Player.getByMemberId(this.guild, this.gm.id);
+            gmCharacter = player.characters.find(c => c.name === 'GM');
+            options.push({
+                label: gmCharacter.name,
+                description: 'Posting as GM',
+                value: `${gmCharacter.id}`,
+            });
+        } else {
+            for (const character of player.characters.values()) {
+                if (this.characters.has(character.id) && character.name !== 'GM') {
+                    options.push({
+                        label: character.name,
+                        description: `Choose ${character.name} to post.`,
+                        value: `${character.id}`,
+                    });
+                }
             }
         }
         const selectActionRow = new MessageActionRow()
@@ -417,7 +556,7 @@ class Roleplay {
             return false;
         }
         embed.setDescription(`${embed.description}\nPlease enter as many messages as needed to post or upload a txt file. Reply with \`done\` when finished or \`cancel\` to cancel. Uploading a txt file will finish the post immediately.`);
-        if (!this.currentTurnOrder[0]?.includes(character)) {
+        if (!this.isTurn(character)) {
             embed.setDescription(`${embed.description}\n\nWARNING: IT IS NOT CURRENTLY YOUR TURN IN THE ROLEPLAY.`);
         }
         message = /** @type {Message} */ (await player.member.send({ embeds: [embed], components: [] }));
@@ -463,10 +602,18 @@ class Roleplay {
     async handleButtonInteraction(interaction, command) {
         if (!interaction.deferred) await interaction.deferReply({ ephemeral: true });
 
+        const dmAR = new MessageActionRow()
+            .addComponents(
+                new MessageButton()
+                    .setLabel('Goto')
+                    .setStyle('LINK')
+                    .setURL(`https://discord.com/channels/@me/${interaction.user.dmChannel?.id || await interaction.user.createDM()?.id}`));
+                    
+
         if (command === 'post') {
             const player = await Player.getByMemberId(interaction.guild, interaction.user.id);
             if (player) {
-                await interaction.editReply({ content: 'Please check your DMs to post.' });
+                await interaction.editReply({ content: 'Please check your DMs to post.', components: [dmAR] });
                 const result = await this.waitForPost(player);
                 return result
             }
@@ -504,6 +651,10 @@ class Roleplay {
             await this.refreshControlMessage();
             await interaction.editReply({ content: 'Refreshed.' });
             return true;
+        } else if (command === 'gmpost') {
+            await interaction.editReply({ content: 'Please check your DMs to post.', components: [dmAR] });
+            const result = await this.waitForPost('gm');
+            return result;
         }
     }
 
@@ -513,18 +664,15 @@ class Roleplay {
      */
     posted(character) {
         const currentTurn = this.currentTurnOrder[0];
-        if (!currentTurn) return;
-        if (currentTurn.includes(character)) {
-            const index = currentTurn.indexOf(character);
+        if (currentTurn?.includes(character.id)) {
+            const index = currentTurn.indexOf(character.id);
             currentTurn.splice(index, 1);
         }
-        if (currentTurn.length === 0) {
+        if (currentTurn?.length === 0) {
             this.currentTurnOrder.shift();
         }
-        if (this.currentTurnOrder.length === 0) {
-            this.newRound();
-        }
         this.calculateTurnTime();
+        this.refreshControlMessage();
     }
 
     /**
@@ -532,17 +680,25 @@ class Roleplay {
      */
     newRound() {
         this.round++;
-        this.currentTurnOrder = this.turnOrder.slice();
+        this.resetCurrentTurnOrder();
+    }
+
+    /**
+     * Sets currentTurnOrder to the turn order.
+     */
+    resetCurrentTurnOrder() {
+        this.currentTurnOrder = this.turnOrder.map(turn => turn.slice());
     }
 
     /**
      * Calculate the exact date and time the next turn has to occur by.
      */
     calculateTurnTime() {
+        let date;
         if (this.turnDuration) {
-            const date = new Date(Date.now() + this.turnDuration);
+            date = new Date(Date.now() + this.turnDuration);
         } else {
-            const date = null;
+            date = null;
         }
         this.turnTime = date;
     }
