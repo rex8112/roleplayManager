@@ -449,6 +449,7 @@ class Roleplay {
                 .addComponents(
                     new MessageButton()
                         .setLabel('Goto')
+                        .setStyle('LINK')
                         .setURL(postedMessages[0].url));
             await message.edit({ embeds: [embed], components: [row] });
         }
