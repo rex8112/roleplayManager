@@ -793,22 +793,23 @@ class Roleplay {
             await interaction.editReply({ content: 'Undo messages are now ' + (this.showUndo ? 'shown.' : 'hidden.') });
         } else if (command.startsWith('increment')) {
             await interaction.editReply({ content: 'Please post the act title, null, or cancel' });
-            /** @type {Roleplay.incrementAct | Roleplay.incrementChapter} */
-            let incrementFunction;
-            if (command.endsWith('Act')) {
-                incrementFunction = this.incrementAct;
-            } else if (command.endsWith('Chapter')) {
-                incrementFunction = this.incrementChapter;
-            }
             const responses = await interaction.channel.awaitMessages({ max: 1, time: 60_000 });
             const responseMessage = responses.first();
             if (!responseMessage) interaction.editReply({ content: 'Cancelled.' });
             if (responseMessage.content.toLowerCase() === 'null') {
-                await incrementFunction(null);
+                if (command.endsWith('Act')) {
+                    this.incrementAct(null);
+                } else if (command.endsWith('Chapter')) {
+                    this.incrementChapter(null);
+                }
             } else if (responseMessage.content.toLowerCase() === 'cancel') {
                 await interaction.editReply({ content: 'Cancelled.' });
             } else {
-                await incrementFunction(responseMessage.content);
+                if (command.endsWith('Act')) {
+                    this.incrementAct(responseMessage.content);
+                } else if (command.endsWith('Chapter')) {
+                    this.incrementChapter(responseMessage.content);
+                }
             }
             await responseMessage.delete();
             interaction.editReply({ content: 'Incremented.' });
