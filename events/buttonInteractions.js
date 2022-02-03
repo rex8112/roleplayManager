@@ -13,7 +13,7 @@ module.exports = {
         if (!interaction.isButton()) return;
 
         const client = interaction.client;
-        const regex = /rp\.([0-9]{1,}):([a-z]+)/g;
+        const regex = /rp\.([0-9]{1,}):([a-zA-Z0-9]+)/g;
         const str = interaction.customId;
         let m;
 
