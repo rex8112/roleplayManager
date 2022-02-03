@@ -103,7 +103,7 @@ class Roleplay {
         let gmPlayer = await Player.getByMemberId(guild, gm.id);
         if (!gmPlayer) gmPlayer = await Player.new(guild, gm);
         const gmCharacter = await Character.new('GM');
-        gmCharacter.color = this.settings.color;
+        gmCharacter.color = roleplay.settings.color;
         gmPlayer.addCharacter(gmCharacter);
         roleplay.addCharacter(gmCharacter);
         gmCharacter.save();
