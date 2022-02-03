@@ -25,9 +25,9 @@ class Roleplay {
         this.category = null;
         this.entry = null;
 
-        this.act = 1;
-        this.chapter = 1;
-        this.round = 1;
+        this.act = 0;
+        this.chapter = 0;
+        this.round = 0;
 
         this.turnOrder = [];
         this.turn = 0;
@@ -384,7 +384,7 @@ class Roleplay {
 
     async incrementChapter(title) {
         this.chapter++;
-        this.round = 1;
+        this.round = 0;
         const chapterTitle = title ? `: ${title}` : '';
         const embed = new MessageEmbed()
             .setTitle(`${this.name} Chapter ${this.chapter}${chapterTitle}`)
@@ -396,8 +396,8 @@ class Roleplay {
     
     async incrementAct(title) {
         this.act++;
-        this.chapter = 1;
-        this.round = 1;
+        this.chapter = 0;
+        this.round = 0;
         const actTitle = title ? `: ${title}` : '';
         const embed = new MessageEmbed()
             .setTitle(`${this.name} Act ${this.act}${actTitle}`)
