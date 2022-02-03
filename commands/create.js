@@ -18,18 +18,6 @@ module.exports = {
                 .addStringOption(option => 
                     option.setName('roleplayname')
                         .setDescription('The name of the roleplay.')
-                        .setRequired(true)))
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName('player')
-                .setDescription('Create a new player!'))
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName('character')
-                .setDescription('Create a new character!')
-                .addStringOption(option =>
-                    option.setName('charactername')
-                        .setDescription('The name of the character.')
                         .setRequired(true))),
     /**
      * 
