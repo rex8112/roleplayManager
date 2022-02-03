@@ -1,12 +1,15 @@
 // character.js
-const { Collection } = require("discord.js");
-const { Information } = require("./information");
+const { Collection, Guild, TextChannel, MessageEmbed, Message } = require('discord.js');
+const { Information } = require('./information');
+const { Character: CDB } = require('./database');
 
 class Character {
     constructor() {
         this.id = 0;
+        this.entry = null;
         this.name = '';
-        this.user = null;
+        this.playerId = null;
+        this.color = '#ffffff';
 
         this.knowledge = new Array();
 
@@ -15,7 +18,195 @@ class Character {
         this.gmInformation = new Collection();
     }
 
+    // Static methods
+    /**
+     * Create a new character and add it to the database.
+     * @param {string} name The name of the character.
+     * @returns {Promise<Character>} A promise that resolves to the new character.
+     */
+    static async new(name) {
+        const character = new Character();
+        character.name = name;
+        const data = character.toJSON();
+        delete data.id;
+        const entry = await CDB.create(data);
+        character.id = entry.id;
+        character.entry = entry;
+        return character;
+    }
+
+    /**
+     * Get a character from the database.
+     * @param {number} id The id of the character to retrieve.
+     * @returns {Promise<Character>} A promise that resolves to the character.
+     */
+    static async get(id) {
+        const entry = await CDB.findOne({ where: { id } });
+        if (!entry) return null;
+        const character = await Character.fromJSON(entry);
+        return character;
+    }
+    
+    /**
+     * Get a collection of characters owned by a user.
+     * @param {string} id The id of the user who owns the character.
+     * @returns {Promise<Collection<string, Character>>} A promise that resolves to a collection of characters.
+     */
+    static async getByUserId(id) {
+        const charactersCollection = new Collection();
+        const characters = await CDB.findAll({ where: { user: id } });
+        for (const data of characters) {
+            const character = await Character.fromJSON(data);
+            charactersCollection.set(character.id, character);
+        }
+        return charactersCollection;
+    }
+
+    /**
+     * Build a new character.
+     * @param {TextChannel} channel The channel to build the character in.
+     */
+    static async build(channel) {
+        const data = {
+            name: '',
+            color: '#ffffff',
+        }
+        const embed = new MessageEmbed()
+            .setTitle('Build a new character')
+            .setColor(data.color);
+        let repeat = true;
+        /** @type {Message} */
+        let message;
+        let keys = Object.keys(data);
+        message = await channel.send({ embeds: [embed] });
+        let m;
+        while (repeat) {
+            let str = '';
+            for(const [key, value] of Object.entries(data)) {
+                str += `${key}: ${value}\n`;
+            }
+            embed.setDescription(`Current data:\n${str}`);
+            embed.setFooter({ text: 'Input validation does not occur until after you say finish.'});
+            embed.setColor(data.color);
+            let fields = new Array();
+            fields.push(
+                {
+                    name: 'Available Commands:',
+                    value: '`set <key> <value>`\n`finish`\n`cancel`',
+                },
+                {
+                    name: 'Important Links:',
+                    value: '[Hex Color Picker](https://www.w3schools.com/colors/colors_picker.asp)',
+                }
+            )
+            embed.setFields(fields);
+            await message.edit({ embeds: [embed] });
+            const response = await channel.awaitMessages({ max: 1, time: 600_000 });
+            if (response.size === 0) {
+                await channel.send('You did not respond in time. Cancelling.');
+                return null;
+            }
+            const responseMessage = response.first();
+            const regex = /set ([a-z]{1,25}) ([ #a-zA-Z0-9]{1,26})/gm
+            if (responseMessage.content === 'finish') {
+                repeat = false;
+                break;
+            } else if (responseMessage.content === 'cancel') {
+                await channel.send('Cancelled.');
+                return null;                
+            } else if ((m = regex.exec(responseMessage.content)) !== null) {
+                const key = m[1];
+                const value = m[2];
+                if (keys.includes(key)) {
+                    data[key] = value;
+                }
+            }
+        }
+        if (data.name === '') {
+            await channel.send('You must enter a name.');
+            return null;
+        } else if (!data.color.startsWith('#') || data.color.length !== 7) {
+            await channel.send('You must enter a valid hex color.');
+            return null;
+        }
+
+        const character = await Character.new(data.name);
+        character.color = data.color;
+        delete data.name;
+        delete data.color;
+        await character.save();
+        return character;
+    }
+
+    /**
+     * Convert a JSON object to a character.
+     * @param {Object} json The JSON object to convert to a character.
+     * @returns The new character.
+     */
+    static async fromJSON(json) {
+        const character = new Character();
+        character.id = json.id;
+        character.name = json.name;
+        character.entry = json;
+        character.playerId = json.playerId;
+        character.color = json.color;
+        character.knowledge = Array.from(json.knowledge);
+        character.publicInformation = new Collection(await Promise.all(json.publicInformation.map(async i => [i, await Information.get(i)])));
+        character.privateInformation = new Collection(await Promise.all(json.privateInformation.map(async i => [i, await Information.get(i)])));
+        character.gmInformation = new Collection(await Promise.all(json.gmInformation.map(async i => [i, await Information.get(i)])));
+        return character;
+    }
+
     // Instance methods
+    /**
+     * Save the character to the database.
+     */
+    async save() {
+        await CDB.update(this.toJSON(), { where: { id: this.id } });
+    }
+
+    /**
+     * Set a character's name and change all of the information's name prefixes to comply.
+     * @param {string} name The new name of the character.
+     */
+    setName(name) {
+        this.name = name;
+        for (const information of this.publicInformation.values()) {
+            information.name = information.name.replace(/(\([^\)]*\))/gm, `(${name})`);
+            information.save();
+        }
+        for (const information of this.privateInformation.values()) {
+            information.name = information.name.replace(/(\([^\)]*\))/gm, `(${name})`);
+            information.save();
+        }
+        for (const information of this.gmInformation.values()) {
+            information.name = information.name.replace(/(\([^\)]*\))/gm, `(${name})`);
+            information.save();
+        }
+        this.save();
+    }
+
+    /**
+     * Get the discord id of the user who owns the character.
+     * @returns {Promise<string>} The discord id of the user who owns the character.
+     */
+    async getUserId() {
+        return await this.entry.getPlayer()?.member;
+    }
+
+    /**
+     * Get the role of the character.
+     * @param {Guild} guild The guild the character is in.
+     */
+    getRole(guild) {
+        return guild.roles.cache.find(r => r.name === this.name);
+    }
+
+    getChannel(guild) {
+        const channelName = this.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        return guild.channels.cache.find(c => c.name === channelName);
+    }
+
     /**
      * Add information to a character.
      * @param {string} classification The clearance classification of the information.
@@ -86,7 +277,7 @@ class Character {
      * @param {string} classification The classification of the attribute. (public, private, gm)
      */
     async addAttribute(name, value, classification = 'public') {
-        const information = await Information.new(name, 'attribute', value);
+        const information = await Information.new(`(${this.name})${name}`, 'attribute', value);
         this.addInformation(classification, information);
     }
 
@@ -121,7 +312,7 @@ class Character {
      * @param {string} classification The classification of the skill. (public, private, gm)
      */
     async addSkill(name, value, classification = 'public') {
-        const information = await Information.new(name, 'skill', value);
+        const information = await Information.new(`(${this.name})${name}`, 'skill', value);
         this.addInformation(classification, information);
     }
 
@@ -156,7 +347,7 @@ class Character {
      * @param {string} classification The classification of the information. (public, private, gm)
      */
     async addGenericInformation(name, value, classification = 'public') {
-        const information = await Information.new(name, 'generic', value);
+        const information = await Information.new(`(${this.name})${name}`, 'generic', value);
         this.addInformation(classification, information);
     }
 
@@ -192,29 +383,13 @@ class Character {
         return {
             id: this.id,
             name: this.name,
-            user: this.user?.id,
+            user: this.playerId?.id,
+            color: this.color,
             knowledge: this.knowledge,
             publicInformation: Array.from(this.publicInformation.keys()),
             privateInformation: Array.from(this.privateInformation.keys()),
             gmInformation: Array.from(this.gmInformation.keys())
         }
-    }
-
-    /**
-     * Convert a JSON object to a character.
-     * @param {Object} json The JSON object to convert to a character.
-     * @returns The new character.
-     */
-    async static fromJSON(json) {
-        const character = new Character();
-        character.id = json.id;
-        character.name = json.name;
-        character.user = json.user;
-        character.knowledge = Array.from(json.knowledge);
-        character.publicInformation = new Collection(json.publicInformation.map(i => [i, await Information.get(i)]));
-        character.privateInformation = new Collection(json.privateInformation.map(i => [i, await Information.get(i)]));
-        character.gmInformation = new Collection(json.gmInformation.map(i => [i, await Information.get(i)]));
-        return character;
     }
 }
 

@@ -51,6 +51,8 @@ class Information {
             information.name = entry.name;
             information.type = entry.type;
             information.value = entry.value;
+            if (['attribute', 'skill'].includes(information.type))
+                information.value = parseInt(information.value);
             return information;
         } catch (error) {
             console.error(error);
@@ -59,6 +61,13 @@ class Information {
     }
 
     // Instance methods
+    /**
+     * Save the information to the database.
+     */
+    async save() {
+        await IDB.update(this.toJSON(), { where: { id: this.id } });
+    }
+    
     /**
      * Convert the information to a JSON object.
      * @returns {Object} The information object.
