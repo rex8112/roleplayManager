@@ -1,6 +1,6 @@
 {
   "name": "roleplay-bot",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A roleplay bot running DiscordJS to manage text-based Roleplays",
   "main": "index.js",
   "scripts": {

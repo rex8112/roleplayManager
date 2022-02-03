@@ -18,6 +18,10 @@ module.exports = {
                 .addStringOption(option => 
                     option.setName('roleplayname')
                         .setDescription('The name of the roleplay.')
+                        .setRequired(true))
+                .addStringOption(option =>
+                    option.setName('color')
+                        .setDescription('The color of the roleplay, as a hex code.')
                         .setRequired(true))),
     /**
      * 
@@ -27,7 +31,9 @@ module.exports = {
         await interaction.deferReply({ ephemeral: true });
         if (interaction.options.getSubcommand() === 'roleplay') {
             const name = interaction.options.getString('roleplayname');
-            const roleplay = await Roleplay.new(interaction.guild, name, interaction.member);
+            const color = interaction.options.getString('color');
+            if (!color.startsWith('#') || color.length !== 7) return interaction.reply({ content: 'Invalid color code. Please format it like `#FFFFFF`' });
+            const roleplay = await Roleplay.new(interaction.guild, name, color, interaction.member);
             interaction.client.roleplays.set(roleplay.id, roleplay);
         } else if (interaction.options.getSubcommand() === 'player') {
             const player = await Player.new(interaction.guild, interaction.member);

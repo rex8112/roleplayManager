@@ -25,9 +25,9 @@ class Roleplay {
         this.category = null;
         this.entry = null;
 
-        this.act = 1;
-        this.chapter = 1;
-        this.round = 1;
+        this.act = 0;
+        this.chapter = 0;
+        this.round = 0;
 
         this.turnOrder = [];
         this.turn = 0;
@@ -40,6 +40,7 @@ class Roleplay {
             controlMessage: null,
             gmMessage: null,
             gmCharacter: null,
+            color: '#ffffff',
         }
     }
 
@@ -48,10 +49,11 @@ class Roleplay {
      * Create a new roleplay.
      * @param {Guild} guild The guild to create the roleplay in.
      * @param {string} name The name of the roleplay.
+     * @param {string} color Hex color code of the roleplay.
      * @param {GuildMember} gm The game master of the roleplay.
      * @returns {Promise<Roleplay>} The roleplay object.
      */
-    static async new(guild, name, gm) {
+    static async new(guild, name, color, gm) {
         const permissionOverwrites = [
             {
                 id: gm.id,
@@ -96,11 +98,12 @@ class Roleplay {
         const entry = await RDB.create(data)
         roleplay.id = entry.id;
         roleplay.entry = entry;
+        roleplay.settings.color = color;
 
         let gmPlayer = await Player.getByMemberId(guild, gm.id);
         if (!gmPlayer) gmPlayer = await Player.new(guild, gm);
         const gmCharacter = await Character.new('GM');
-        gmCharacter.color = '#ff9900';
+        gmCharacter.color = this.settings.color;
         gmPlayer.addCharacter(gmCharacter);
         roleplay.addCharacter(gmCharacter);
         gmCharacter.save();
@@ -215,7 +218,7 @@ class Roleplay {
         const embed = new MessageEmbed()
             .setTitle(`${this.name} Control Panel`)
             .setDescription(`${this.description}\n\nCurrent Turn: ${currentTurnString}\n\nAct: ${this.act}\nChapter: ${this.chapter}\nRound: ${this.round}`)
-            .setColor('ORANGE');
+            .setColor(this.settings.color);
         const actionRow = new MessageActionRow()
             .addComponents(
                 new MessageButton()
@@ -249,7 +252,7 @@ class Roleplay {
             .addField('Characters', characterString ?? '', true)
             .addField('Turn Order', JSON.stringify(this.turnOrder), true)
             .addField('Current Turn Order', JSON.stringify(this.currentTurnOrder), true)
-            .setColor('ORANGE');
+            .setColor(this.settings.color);
         const actionRow = new MessageActionRow()
             .addComponents(
                 new MessageButton()
@@ -339,7 +342,7 @@ class Roleplay {
         const embed = new MessageEmbed()
             .setTitle('Set Turn Order')
             .setDescription('Please enter the turn order in the following format:\n\n`[[1,2,3],[4]]`')
-            .setColor('#0099ff');
+            .setColor(this.settings.color);
         const message = await channel.send({ embeds: [embed] });
 
         const responses = await channel.awaitMessages({ max: 1, time: 120_000 });
@@ -381,11 +384,11 @@ class Roleplay {
 
     async incrementChapter(title) {
         this.chapter++;
-        this.round = 1;
+        this.round = 0;
         const chapterTitle = title ? `: ${title}` : '';
         const embed = new MessageEmbed()
             .setTitle(`${this.name} Chapter ${this.chapter}${chapterTitle}`)
-            .setColor('GREEN');
+            .setColor(this.settings.color);
         const channel = this.getMainChannel();
         const message = await channel.send({ embeds: [embed] });
         await this.createHeaderEntry(title, this.act, this.chapter, message);
@@ -393,12 +396,12 @@ class Roleplay {
     
     async incrementAct(title) {
         this.act++;
-        this.chapter = 1;
-        this.round = 1;
+        this.chapter = 0;
+        this.round = 0;
         const actTitle = title ? `: ${title}` : '';
         const embed = new MessageEmbed()
             .setTitle(`${this.name} Act ${this.act}${actTitle}`)
-            .setColor('GREEN');
+            .setColor(this.settings.color);
         const channel = this.getMainChannel();
         const message = await channel.send({ embeds: [embed] });
         await this.createHeaderEntry(title, this.act, this.chapter, message);
@@ -788,6 +791,27 @@ class Roleplay {
             this.showUndo = !this.showUndo;
             await this.refreshGMControlMessage();
             await interaction.editReply({ content: 'Undo messages are now ' + (this.showUndo ? 'shown.' : 'hidden.') });
+        } else if (command.startsWith('increment')) {
+            await interaction.editReply({ content: 'Please post the act title, null, or cancel' });
+            /** @type {Roleplay.incrementAct | Roleplay.incrementChapter} */
+            let incrementFunction;
+            if (command.endsWith('Act')) {
+                incrementFunction = this.incrementAct;
+            } else if (command.endsWith('Chapter')) {
+                incrementFunction = this.incrementChapter;
+            }
+            const responses = await interaction.channel.awaitMessages({ max: 1, time: 60_000 });
+            const responseMessage = responses.first();
+            if (!responseMessage) interaction.editReply({ content: 'Cancelled.' });
+            if (responseMessage.content.toLowerCase() === 'null') {
+                await incrementFunction(null);
+            } else if (responseMessage.content.toLowerCase() === 'cancel') {
+                await interaction.editReply({ content: 'Cancelled.' });
+            } else {
+                await incrementFunction(responseMessage.content);
+            }
+            await responseMessage.delete();
+            interaction.editReply({ content: 'Incremented.' });
         }
     }
 
