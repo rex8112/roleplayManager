@@ -34,6 +34,7 @@ class Roleplay {
         this.currentTurnOrder = [];
         this.turnDuration = null;
         this.turnTime = null;
+        this.showUndo = false;
         this.settings = {
             defaultDie: 20,
             controlMessage: null,
@@ -213,7 +214,8 @@ class Roleplay {
         const currentTurnString = this.getCurrentTurn()?.map(m => this.characters.get(m)?.name).join(', ') || this.getGMCharacter().name;
         const embed = new MessageEmbed()
             .setTitle(`${this.name} Control Panel`)
-            .setDescription(`${this.description}\n\nCurrent Turn: ${currentTurnString}\n\nAct: ${this.act}\nChapter: ${this.chapter}\nRound: ${this.round}`);
+            .setDescription(`${this.description}\n\nCurrent Turn: ${currentTurnString}\n\nAct: ${this.act}\nChapter: ${this.chapter}\nRound: ${this.round}`)
+            .setColor('ORANGE');
         const actionRow = new MessageActionRow()
             .addComponents(
                 new MessageButton()
@@ -225,14 +227,7 @@ class Roleplay {
                     .setLabel('Create Character')
                     .setStyle('SUCCESS'),
             );
-        const actionRow2 = new MessageActionRow()
-            .addComponents(
-                new MessageButton()
-                    .setCustomId(`rp.${this.id}:refresh`)
-                    .setLabel('Refresh')
-                    .setStyle('SECONDARY'),
-            );
-        const message = await channel.send({ embeds: [embed], components: [actionRow, actionRow2] });
+        const message = await channel.send({ embeds: [embed], components: [actionRow] });
         this.settings.controlMessage = message.id;
         await this.save();
         await this.refreshGMControlMessage();
@@ -248,9 +243,13 @@ class Roleplay {
             } catch (e) {}
             if (oldMessage) await oldMessage.delete();
         }
+        const characterString = this.characters.map(c => `${c.id}: ${c.name}`).join('\n');
         const embed = new MessageEmbed()
             .setTitle(`${this.name} Control Panel`)
-            .setDescription(`${this.description}\n\nCurrent Turn: ${this.currentTurnOrder[0]?.map(m => this.characters.get(m)?.name).join(', ')}\n\nAct: ${this.act}\nChapter: ${this.chapter}\nRound: ${this.round}`);
+            .addField('Characters', characterString ?? '', true)
+            .addField('Turn Order', JSON.stringify(this.turnOrder), true)
+            .addField('Current Turn Order', JSON.stringify(this.currentTurnOrder), true)
+            .setColor('ORANGE');
         const actionRow = new MessageActionRow()
             .addComponents(
                 new MessageButton()
@@ -265,19 +264,47 @@ class Roleplay {
                     .setCustomId(`rp.${this.id}:incrementChapter`)
                     .setLabel('New Chapter')
                     .setStyle('SUCCESS'),
+                new MessageButton()
+                    .setCustomId(`rp.${this.id}:setturnorder`)
+                    .setLabel('Set Turn Order')
+                    .setStyle('SECONDARY'),
             );
-        const actionRow2 = new MessageActionRow()
-            .addComponents(
+        const actionRow2 = new MessageActionRow();
+        if (this.showUndo) {
+            actionRow2.addComponents(
                 new MessageButton()
                     .setCustomId(`rp.${this.id}:undo`)
                     .setLabel('Undo')
                     .setStyle('DANGER'),
                 new MessageButton()
-                    .setCustomId(`rp.${this.id}:resetRound`)
-                    .setLabel('Reset Round')
+                    .setCustomId(`rp.${this.id}:undo1`)
+                    .setLabel('Undo Append Turn')
                     .setStyle('DANGER'),
+                new MessageButton()
+                    .setCustomId(`rp.${this.id}:undo2`)
+                    .setLabel('Undo Create Turn')
+                    .setStyle('DANGER'),
+                new MessageButton()
+                    .setCustomId(`rp.${this.id}:showUndo`)
+                    .setLabel('Hide Undo')
+                    .setStyle('SECONDARY'),
             );
-        const message = await channel.send({ embeds: [embed], components: [actionRow, actionRow2] });
+        } else {
+            actionRow2.addComponents(
+                new MessageButton()
+                    .setCustomId(`rp.${this.id}:showUndo`)
+                    .setLabel('Show Undo')
+                    .setStyle('SECONDARY'),
+            );
+        }
+        const actionRow3 = new MessageActionRow()
+            .addComponents(
+                new MessageButton()
+                    .setCustomId(`rp.${this.id}:refresh`)
+                    .setLabel('Refresh')
+                    .setStyle('SECONDARY'),
+            );
+        const message = await channel.send({ embeds: [embed], components: [actionRow, actionRow2, actionRow3] });
         this.settings.gmMessage = message.id;
         await this.save();
         return message;
@@ -302,6 +329,33 @@ class Roleplay {
         this.currentTurnOrder = [];
         this.save();
         this.refreshControlMessage();
+    }
+
+    /**
+     * Get a turn order from a user/
+     * @param {TextChannel} channel The channel to ask in.
+     */
+    async promptForTurnOrder(channel) {
+        const embed = new MessageEmbed()
+            .setTitle('Set Turn Order')
+            .setDescription('Please enter the turn order in the following format:\n\n`[[1,2,3],[4]]`')
+            .setColor('#0099ff');
+        const message = await channel.send({ embeds: [embed] });
+
+        const responses = await channel.awaitMessages({ max: 1, time: 120_000 });
+        const response = responses.first();
+        if (!response) return null;
+        let turnOrder;
+        try {
+            turnOrder = JSON.parse(response.content);
+        } catch (e) {
+            return null;
+        }
+        if (!Array.isArray(turnOrder)) return null;
+        if (!turnOrder.every(t => Array.isArray(t))) return null;
+        await message.delete();
+        responses.map(r => r.delete());
+        return turnOrder;
     }
 
     /**
@@ -423,6 +477,7 @@ class Roleplay {
             }
             const file = Roleplay.DOWNLOAD_PATH + `${this.id}_tmp.txt`;
             content = fs.readFileSync(file, 'utf8');
+            fs.unlink(file, (err) => { if (err) console.error(err); });
             //fs.rm(file);
         } else {
             content = messages.map(m => m.content).join('\n');
@@ -446,6 +501,51 @@ class Roleplay {
 
         this.posted(character);
         return posts;
+    }
+
+    /**
+     * Delete the last post and send it back to the poster.
+     * @param {number} turnOrderMode The turn order mode. (0 = nothing, 1 = add to current turn, 2 = create new turn.)
+     * @returns {Promise<boolean>} If the roleplay was undone successfully.
+     */
+    async undoLastPost(turnOrderMode = 0) {
+        const lastPostEntry = await RoleplayPost.findOne({ where: { roleplayId: this.id }, order: [['createdAt', 'DESC']] });
+        if (!lastPostEntry) return false;
+        const channel = this.getMainChannel();
+        /** @type {Message[]} */
+        const messagesPromises = JSON.parse(lastPostEntry.messages).map(m => channel.messages.fetch(m));
+        const messages = await Promise.all(messagesPromises);
+        const postContents = new Array();
+        for (const message of messages) {
+            postContents.push(message.embeds[0].description);
+            await message.delete();
+        }
+        const content = postContents.join('\n');
+        const path = Roleplay.DOWNLOAD_PATH + `${this.id}_undo.txt`;
+        // Save the content to a file and send it to the poster.
+        fs.writeFileSync(path, content);
+        /** @type {Character} */
+        const character = this.characters.get(lastPostEntry.characterId);
+        const player = await Player.getByCharacter(this.guild, character);
+        await player.member.send({ content: 'Your last post was undone. Here is the contents of that post.', files: [path] });
+        fs.unlink(path, (err) => { if (err) console.error(err); });
+        await lastPostEntry.destroy();
+        if (character.id === this.getGMCharacter().id) {
+            this.currentTurnOrder = [];
+            this.round--;
+        } else if (turnOrderMode === 1) {
+            const currentTurn = this.getCurrentTurn();
+            if (currentTurn) {
+                currentTurn.push(character.id);
+            } else {
+                this.currentTurnOrder.push([character.id]);
+            }
+        } else if (turnOrderMode === 2) {
+            this.currentTurnOrder.unshift([character.id]);
+        }
+        await this.save();
+        await this.refreshControlMessage();
+        return true;
     }
 
     /**
@@ -500,11 +600,19 @@ class Roleplay {
                 value: `${gmCharacter.id}`,
             });
         } else {
-            for (const character of player.characters.values()) {
+            /** @type {Character[]} */
+            const characters = Array.from(player.characters.values());
+            const sortedCharacters = characters.sort((a, b) => {
+                const aValue = this.getCurrentTurn().includes(a.id) ? 0 : 1;
+                const bValue = this.getCurrentTurn().includes(b.id) ? 0 : 1;
+                return aValue - bValue;
+            });
+            for (const character of sortedCharacters) {
                 if (this.characters.has(character.id) && character.name !== 'GM') {
+                    const isTurn = this.getCurrentTurn().includes(character.id);
                     options.push({
                         label: character.name,
-                        description: `Choose ${character.name} to post.`,
+                        description: `${isTurn ? 'CURRENT TURN! ' : ''}Choose ${character.name} to post.`,
                         value: `${character.id}`,
                     });
                 }
@@ -566,6 +674,10 @@ class Roleplay {
             const responses = await message.channel.awaitMessages({ max: 1, time: 600_000 });
             const responseMessage = responses.first();
             if (responseMessage.content.toLowerCase() === 'done') {
+                if (messages.length === 0) {
+                    await message.delete();
+                    return false;
+                }
                 repeat = false;
             } else if (responseMessage.content.toLowerCase() === 'cancel') {
                 await message.delete();
@@ -655,6 +767,27 @@ class Roleplay {
             await interaction.editReply({ content: 'Please check your DMs to post.', components: [dmAR] });
             const result = await this.waitForPost('gm');
             return result;
+        } else if (command.startsWith('undo')) {
+            if (command.endsWith('1')) { 
+                await this.undoLastPost(1);
+            } else if (command.endsWith('2')) {
+                await this.undoLastPost(2);
+            } else {
+                await this.undoLastPost();
+            }
+            await interaction.editReply({ content: 'Undid.' });
+        } else if (command === 'setturnorder') {
+            const newTurnOrder = await this.promptForTurnOrder(interaction.channel);
+            if (newTurnOrder !== null) {
+                this.setTurnOrder(newTurnOrder);
+                await interaction.editReply({ content: 'Turn Order Set.' });
+            } else {
+                await interaction.editReply({ content: 'Turn Order Cancelled.' });
+            }
+        } else if (command === 'showUndo') {
+            this.showUndo = !this.showUndo;
+            await this.refreshGMControlMessage();
+            await interaction.editReply({ content: 'Undo messages are now ' + (this.showUndo ? 'shown.' : 'hidden.') });
         }
     }
 
