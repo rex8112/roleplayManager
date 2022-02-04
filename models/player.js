@@ -40,6 +40,11 @@ class Player {
                 id: guild.roles.everyone,
                 deny: ['VIEW_CHANNEL'],
                 type: 'role'
+            },
+            {
+                id: guild.me.id,
+                allow: ['VIEW_CHANNEL'],
+                type: 'member'
             }
         ]
         player.category = await guild.channels.create(member.displayName, { type: 'GUILD_CATEGORY', permissionOverwrites: permissions });
