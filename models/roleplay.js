@@ -739,25 +739,8 @@ class Roleplay {
             if (!player) {
                 player = await Player.new(interaction.guild, interaction.member);
             }
-            const permissionOverwrites = [
-                {
-                    id: gm.id,
-                    allow: ['VIEW_CHANNEL'],
-                    type: 'member',
-                },
-                {
-                    id: guild.me.id,
-                    allow: ['VIEW_CHANNEL'],
-                    type: 'member',
-                },
-                {
-                    id: guild.roles.everyone.id,
-                    deny: ['VIEW_CHANNEL'],
-                    type: 'role',
-                }
-            ];
-            const channel = await player.category.createChannel('creating-character', { permissionOverwrites });
-            await channel.permissionOverwrites.create(player.member, {
+            const channel = await player.category.createChannel('creating-character');
+            await channel.permissionOverwrites.create(this.gm, {
                 VIEW_CHANNEL: true,
             });
             await interaction.editReply({ content: `Please head to <#${channel.id}> to create your character.` });
