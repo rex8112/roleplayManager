@@ -741,17 +741,17 @@ class Roleplay {
             }
             const permissionOverwrites = [
                 {
-                    id: gm.id,
+                    id: this.gm.id,
                     allow: ['VIEW_CHANNEL'],
                     type: 'member',
                 },
                 {
-                    id: guild.me.id,
+                    id: this.guild.me.id,
                     allow: ['VIEW_CHANNEL'],
                     type: 'member',
                 },
                 {
-                    id: guild.roles.everyone.id,
+                    id: this.guild.roles.everyone.id,
                     deny: ['VIEW_CHANNEL'],
                     type: 'role',
                 }
