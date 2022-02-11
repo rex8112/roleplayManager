@@ -206,7 +206,7 @@ class Roleplay {
      * @returns {Promise<Message>} The message for the roleplay controls.
      */
     async refreshControlMessage() {
-        const channel = this.getInformationChannel();
+        const channel = this.getMainChannel();
         if (this.settings.controlMessage) {
             let oldMessage;
             try {
