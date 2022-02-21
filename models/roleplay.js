@@ -28,6 +28,7 @@ class Roleplay {
         this.act = 0;
         this.chapter = 0;
         this.round = 0;
+        this.busy = false;
 
         this.turnOrder = [];
         this.turn = 0;
@@ -38,6 +39,7 @@ class Roleplay {
         this.settings = {
             defaultDie: 20,
             controlMessage: null,
+            characterControlMessage: null,
             gmMessage: null,
             gmCharacter: null,
             color: '#ffffff',
@@ -225,27 +227,43 @@ class Roleplay {
                     .setCustomId(`rp.${this.id}:post`)
                     .setLabel('Post')
                     .setStyle('PRIMARY'),
+            );
+        const message = await channel.send({ embeds: [embed], components: [actionRow] });
+        this.settings.controlMessage = message.id;
+        await this.save();
+        return message;
+    }
+
+    async refreshCharacterControlMessage() {
+        const channel = this.getCharacterChannel();
+        if (this.settings.characterControlMessage) {
+            let oldMessage;
+            try {
+                oldMessage = await channel.messages.fetch(this.settings.characterControlMessage)
+            } catch (e) {}
+            if (oldMessage) await oldMessage.delete();
+        }
+        const embed = new MessageEmbed()
+            .setTitle(`Character Control Panel`)
+            .setDescription('More will be added to this but I wanted to get the create character button away from post.')
+            .setColor(this.settings.color);
+        const actionRow = new MessageActionRow()
+            .addComponents(
                 new MessageButton()
                     .setCustomId(`rp.${this.id}:character`)
                     .setLabel('Create Character')
                     .setStyle('SUCCESS'),
             );
         const message = await channel.send({ embeds: [embed], components: [actionRow] });
-        this.settings.controlMessage = message.id;
+        this.settings.characterControlMessage = message.id;
         await this.save();
-        await this.refreshGMControlMessage();
         return message;
     }
 
-    async refreshGMControlMessage() {
+    async refreshGMControlMessage(edit = false) {
         const channel = this.getGMChannel();
-        if (this.settings.gmMessage) {
-            let oldMessage;
-            try {
-                oldMessage = await channel.messages.fetch(this.settings.gmMessage)
-            } catch (e) {}
-            if (oldMessage) await oldMessage.delete();
-        }
+        let needNew = false;
+
         const characterString = this.characters.map(c => `${c.id}: ${c.name}`).join('\n');
         const embed = new MessageEmbed()
             .setTitle(`${this.name} Control Panel`)
@@ -307,10 +325,30 @@ class Roleplay {
                     .setLabel('Refresh')
                     .setStyle('SECONDARY'),
             );
-        const message = await channel.send({ embeds: [embed], components: [actionRow, actionRow2, actionRow3] });
-        this.settings.gmMessage = message.id;
-        await this.save();
-        return message;
+
+        let oldMessage;
+        if (this.settings.gmMessage) {
+            try {
+                oldMessage = await channel.messages.fetch(this.settings.gmMessage)
+            } catch (e) {}
+            if (edit) {
+                if (oldMessage) {
+                    await oldMessage.edit({ embeds: [embed], components: [actionRow, actionRow2, actionRow3] });
+                } else {
+                    needNew = true;
+                }
+            } else {
+                if (oldMessage) await oldMessage.delete();
+                needNew = true;
+            }
+        }
+        if (needNew) {
+            const message = await channel.send({ embeds: [embed], components: [actionRow, actionRow2, actionRow3] });
+            this.settings.gmMessage = message.id;
+            await this.save();
+            return message;
+        }
+        return oldMessage;
     }
 
     /**
@@ -436,6 +474,14 @@ class Roleplay {
      */
     getMainChannel() {
         return this.category.children.find(c => c.name === 'main');
+    }
+
+    /**
+     * 
+     * @returns {TextChannel} The characters channel of the roleplay.
+     */
+    getCharacterChannel() {
+        return this.category.children.find(c => c.name === 'characters');
     }
     
     /**
@@ -612,7 +658,7 @@ class Roleplay {
             });
             for (const character of sortedCharacters) {
                 if (this.characters.has(character.id) && character.name !== 'GM') {
-                    const isTurn = this.getCurrentTurn().includes(character.id);
+                    const isTurn = this.getCurrentTurn()?.includes(character.id);
                     options.push({
                         label: character.name,
                         description: `${isTurn ? 'CURRENT TURN! ' : ''}Choose ${character.name} to post.`,
@@ -728,9 +774,16 @@ class Roleplay {
         if (command === 'post') {
             const player = await Player.getByMemberId(interaction.guild, interaction.user.id);
             if (player) {
-                await interaction.editReply({ content: 'Please check your DMs to post.', components: [dmAR] });
-                const result = await this.waitForPost(player);
-                return result
+                if (this.busy) {
+                    await interaction.editReply('Someone is already posting in this roleplay.');
+                    return false;
+                } else {
+                    await interaction.editReply({ content: 'Please check your DMs to post.', components: [dmAR] });
+                    this.busy = true;
+                    const result = await this.waitForPost(player);
+                    this.busy = false;
+                    return result
+                }
             }
             await interaction.editReply({ content: 'You are not registered.' });
             return false;
@@ -764,12 +817,22 @@ class Roleplay {
             await interaction.editReply({ content: 'Character created.' });
         } else if (command === 'refresh') {
             await this.refreshControlMessage();
+            await this.refreshCharacterControlMessage();
+            await this.refreshGMControlMessage();
             await interaction.editReply({ content: 'Refreshed.' });
             return true;
         } else if (command === 'gmpost') {
             await interaction.editReply({ content: 'Please check your DMs to post.', components: [dmAR] });
-            const result = await this.waitForPost('gm');
-            return result;
+            if (this.busy) {
+                await interaction.editReply('Someone is already posting in this roleplay.');
+            } else {
+                await interaction.editReply({ content: 'Please check your DMs to post.', components: [dmAR] });
+                this.busy = true;
+                const result = await this.waitForPost('gm');
+                this.busy = false;
+                return result
+            }
+            return false;
         } else if (command.startsWith('undo')) {
             if (command.endsWith('1')) { 
                 await this.undoLastPost(1);
@@ -789,7 +852,7 @@ class Roleplay {
             }
         } else if (command === 'showUndo') {
             this.showUndo = !this.showUndo;
-            await this.refreshGMControlMessage();
+            await this.refreshGMControlMessage(true);
             await interaction.editReply({ content: 'Undo messages are now ' + (this.showUndo ? 'shown.' : 'hidden.') });
         } else if (command.startsWith('increment')) {
             await interaction.editReply({ content: 'Please post the act title, null, or cancel' });
