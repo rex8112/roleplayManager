@@ -15,7 +15,7 @@ module.exports = {
             subcommand
                 .setName('roleplay')
                 .setDescription('Create a new roleplay!')
-                .addStringOption(option => 
+                .addStringOption(option =>
                     option.setName('roleplayname')
                         .setDescription('The name of the roleplay.')
                         .setRequired(true))

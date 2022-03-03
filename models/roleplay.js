@@ -112,6 +112,8 @@ class Roleplay {
         roleplay.settings.gmCharacter = gmCharacter.id;
 
         await roleplay.refreshControlMessage();
+        await roleplay.refreshCharacterControlMessage();
+        await roleplay.refreshGMControlMessage();
         return roleplay;
     }
 
@@ -169,6 +171,9 @@ class Roleplay {
         roleplay.turnDuration = json.turnDuration;
         roleplay.turnTime = json.turnTime;
         roleplay.settings = json.settings;
+        await roleplay.refreshControlMessage();
+        await roleplay.refreshCharacterControlMessage();
+        await roleplay.refreshGMControlMessage();
         return roleplay;
     }
 
