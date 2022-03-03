@@ -346,6 +346,8 @@ class Roleplay {
                 if (oldMessage) await oldMessage.delete();
                 needNew = true;
             }
+        } else {
+            needNew = true;
         }
         if (needNew) {
             const message = await channel.send({ embeds: [embed], components: [actionRow, actionRow2, actionRow3] });
