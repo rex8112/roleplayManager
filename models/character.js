@@ -157,6 +157,78 @@ class Character {
         return character;
     }
 
+    async edit(guild) {
+        const channel = this.getChannel(guild);
+        const data = {
+            name: this.name,
+            color: this.color,
+        }
+        const embed = new MessageEmbed()
+            .setTitle('Edit your character')
+            .setColor(data.color);
+        let repeat = true;
+        /** @type {Message} */
+        let message;
+        let keys = Object.keys(data);
+        message = await channel.send({ embeds: [embed] });
+        let m;
+        while (repeat) {
+            let str = '';
+            for(const [key, value] of Object.entries(data)) {
+                str += `${key}: ${value}\n`;
+            }
+            embed.setDescription(`Current data:\n${str}`);
+            embed.setFooter({ text: 'Input validation does not occur until after you say finish.'});
+            embed.setColor(data.color);
+            let fields = new Array();
+            fields.push(
+                {
+                    name: 'Available Commands:',
+                    value: '`set <key> <value>`\n`finish`\n`cancel`',
+                },
+                {
+                    name: 'Important Links:',
+                    value: '[Hex Color Picker](https://www.w3schools.com/colors/colors_picker.asp)',
+                }
+            )
+            embed.setFields(fields);
+            await message.edit({ embeds: [embed] });
+            const response = await channel.awaitMessages({ max: 1, time: 600_000 });
+            if (response.size === 0) {
+                await channel.send('You did not respond in time. Cancelling.');
+                return null;
+            }
+            const responseMessage = response.first();
+            const regex = /set ([a-z]{1,25}) ([ #a-zA-Z0-9]{1,26})/gm
+            if (responseMessage.content === 'finish') {
+                repeat = false;
+                break;
+            } else if (responseMessage.content === 'cancel') {
+                await channel.send('Cancelled.');
+                return null;                
+            } else if ((m = regex.exec(responseMessage.content)) !== null) {
+                const key = m[1];
+                const value = m[2];
+                if (keys.includes(key)) {
+                    data[key] = value;
+                }
+            }
+        }
+        if (data.name === '') {
+            await channel.send('You must enter a name.');
+            return null;
+        } else if (!data.color.startsWith('#') || data.color.length !== 7) {
+            await channel.send('You must enter a valid hex color.');
+            return null;
+        }
+
+        this.name = data.name;
+        this.color = data.color;
+        await channel.edit({ name: this.getChannelName() });
+        await this.save();
+        return this;
+    }
+
     // Instance methods
     /**
      * Save the character to the database.
@@ -191,7 +263,8 @@ class Character {
      * @returns {Promise<string>} The discord id of the user who owns the character.
      */
     async getUserId() {
-        return await this.entry.getPlayer()?.member;
+        const player = await this.entry.getPlayer();
+        return player?.member;
     }
 
     /**
@@ -202,8 +275,17 @@ class Character {
         return guild.roles.cache.find(r => r.name === this.name);
     }
 
+    getChannelName() {
+        return this.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    }
+
+    /**
+     * 
+     * @param {Guild} guild 
+     * @returns {TextChannel} The character channel.
+     */
     getChannel(guild) {
-        const channelName = this.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const channelName = this.getChannelName();
         return guild.channels.cache.find(c => c.name === channelName);
     }
 

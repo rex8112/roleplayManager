@@ -8,6 +8,7 @@ const wait = require('util').promisify(setTimeout);
 const { Character } = require('./character');
 const { Player } = require('./player');
 const { Roleplay: RDB, RoleplayPost, Headers } = require('./database');
+const { CharacterControl } = require('./characterControl');
 
 class Roleplay {
     static DOWNLOAD_PATH = `./downloads/`;
@@ -21,6 +22,7 @@ class Roleplay {
         this.name = '';
         this.description = '';
         this.characters = new Collection();
+        this.controlPanels = new Collection();
         this.gm = null;
         this.category = null;
         this.entry = null;
@@ -161,6 +163,7 @@ class Roleplay {
         for (const id of json.characters) {
             const character = await Character.get(id);
             roleplay.characters.set(id, character);
+            new CharacterControl(roleplay, character);
         }
         roleplay.act = json.act;
         roleplay.chapter = json.chapter;
@@ -221,10 +224,15 @@ class Roleplay {
             } catch (e) {}
             if (oldMessage) await oldMessage.delete();
         }
+        let mentions = '';
+        const ids = await this.getWhosTurn();
+        for (const id of ids) {
+            mentions += `<@${id}> `;
+        }
         const currentTurnString = this.getCurrentTurn()?.map(m => this.characters.get(m)?.name).join(', ') || this.getGMCharacter().name;
         const embed = new MessageEmbed()
             .setTitle(`${this.name} Control Panel`)
-            .setDescription(`${this.description}\n\nCurrent Turn: ${currentTurnString}\n\nAct: ${this.act}\nChapter: ${this.chapter}\nRound: ${this.round}`)
+            .setDescription(`${this.description}\n\nCurrent Turn: ${currentTurnString}\n${mentions}\n\nAct: ${this.act}\nChapter: ${this.chapter}\nRound: ${this.round}`)
             .setColor(this.settings.color);
         const actionRow = new MessageActionRow()
             .addComponents(
@@ -232,6 +240,10 @@ class Roleplay {
                     .setCustomId(`rp.${this.id}:post`)
                     .setLabel('Post')
                     .setStyle('PRIMARY'),
+                new MessageButton()
+                    .setCustomId(`rp.${this.id}:poke`)
+                    .setLabel('Poke')
+                    .setStyle('SUCCESS'),
             );
         const message = await channel.send({ embeds: [embed], components: [actionRow] });
         this.settings.controlMessage = message.id;
@@ -329,6 +341,10 @@ class Roleplay {
                     .setCustomId(`rp.${this.id}:refresh`)
                     .setLabel('Refresh')
                     .setStyle('SECONDARY'),
+                new MessageButton()
+                    .setCustomId(`rp.${this.id}:refreshAll`)
+                    .setLabel('Refresh All')
+                    .setStyle('SECONDARY'),
             );
 
         let oldMessage;
@@ -364,6 +380,7 @@ class Roleplay {
      */
     async addCharacter(character) {
         this.characters.set(character.id, character);
+        new CharacterControl(this, character);
         await this.entry.addCharacters(character.entry);
         await this.save();
     }
@@ -470,6 +487,11 @@ class Roleplay {
      */
     async getWhosTurn() {
         const characters = this.getCurrentTurn();
+        if (!characters) {
+            const gm = this.getGMCharacter();
+            const gmMemberID = await gm.getUserId();
+            return [gmMemberID];
+        }
         const ids = characters?.map(c => this.characters.get(c)?.getUserId());
         if (ids) await Promise.all(ids);
         return ids ?? [];
@@ -822,9 +844,16 @@ class Roleplay {
             await interaction.member.roles.add(role);
 
             await interaction.editReply({ content: 'Character created.' });
-        } else if (command === 'refresh') {
+        } else if (command === 'refreshAll') {
             await this.refreshControlMessage();
             await this.refreshCharacterControlMessage();
+            await this.refreshGMControlMessage();
+            for (const panel of this.controlPanels.values()) {
+                await panel.refresh();
+            }
+            await interaction.editReply({ content: 'Refreshed.' });
+            return true;
+        } else if (command === 'refresh') {
             await this.refreshGMControlMessage();
             await interaction.editReply({ content: 'Refreshed.' });
             return true;
@@ -883,6 +912,25 @@ class Roleplay {
             }
             await responseMessage.delete();
             interaction.editReply({ content: 'Incremented.' });
+        } else if (command.startsWith('panel')) {
+            const channelID = interaction.channelId;
+            const panel = this.controlPanels.get(channelID);
+            await panel.handleInteraction(interaction, command);
+        } else if (command === 'poke') {
+            const userIDs = await this.getWhosTurn();
+            const users = await interaction.guild.members.fetch({ user: userIDs });
+            const channel = this.getMainChannel();
+            const channelLink = `https://discord.com/channels/${channel.guild.id}/${channel.id}`;
+            for (const user of users.values()) {
+                const embed = new MessageEmbed()
+                    .setTitle('Poked!')
+                    .setDescription(`It is currently your turn in [${this.name}](${channelLink}).`)
+                    .setColor(this.settings.color);
+                await user.send({
+                    embeds: [embed],
+                })
+            }
+            await interaction.editReply({ content: 'Poked.' });
         }
     }
 
