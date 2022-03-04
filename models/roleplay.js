@@ -493,7 +493,7 @@ class Roleplay {
             return [gmMemberID];
         }
         const ids = characters?.map(c => this.characters.get(c)?.getUserId());
-        if (ids) await Promise.all(ids);
+        if (ids) return await Promise.all(ids) ?? [];
         return ids ?? [];
     }
 
