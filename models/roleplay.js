@@ -163,7 +163,7 @@ class Roleplay {
         for (const id of json.characters) {
             const character = await Character.get(id);
             roleplay.characters.set(id, character);
-            new CharacterControl(roleplay, character);
+            if (character.id !== json.settings.gmCharacter) new CharacterControl(roleplay, character);
         }
         roleplay.act = json.act;
         roleplay.chapter = json.chapter;
