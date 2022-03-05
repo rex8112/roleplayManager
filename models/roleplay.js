@@ -670,8 +670,8 @@ class Roleplay {
         const options = new Array();
         let gmCharacter;
         if (player === 'gm') {
-            player = await Player.getByMemberId(this.guild, this.gm.id);
-            gmCharacter = player.characters.find(c => c.name === 'GM');
+            gmCharacter = this.characters.get(this.settings.gmCharacter);
+            player = await Player.getByCharacter(this.guild, gmCharacter);
             options.push({
                 label: gmCharacter.name,
                 description: 'Posting as GM',
@@ -716,7 +716,7 @@ class Roleplay {
             message = await player.member.send({ embeds: [embed], components: [selectActionRow] });
             try{
                 const response = await message.awaitMessageComponent({ componentType: 'SELECT_MENU', time: 60000 })
-                character = await Character.get(parseInt(response.values[0]));
+                character = this.characters.get(parseInt(response.values[0]));
                 embed.setDescription(`You have selected ${character.name} to post as.`);
                 await response.update({ embeds: [embed] });
                 await wait(1000);
@@ -730,7 +730,7 @@ class Roleplay {
             }
         } else if (options.length === 1) {
             // If there is only one character, use that character.
-            character = player.characters.get(parseInt(options[0].value));
+            character = this.characters.get(parseInt(options[0].value));
             embed.setDescription(`You are posting as ${character.name}.`);
             embed.setColor(character.color);
         } else {
